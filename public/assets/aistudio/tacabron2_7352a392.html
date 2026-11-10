@@ -1,0 +1,2076 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>TA CABRÓN 🌮 - Sistema POS, Cocina & Nómina</title>
+  
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com">
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <style>
+    body {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      background-color: #090a0f;
+      color: #f8fafc;
+      user-select: none;
+    }
+    h1, h2, h3, h4, .font-heading {
+      font-family: 'Outfit', sans-serif;
+    }
+    .glass-card {
+      background: rgba(18, 20, 29, 0.92);
+      backdrop-filter: blur(12px);
+      border: 1px solid #24293a;
+      border-radius: 1rem;
+    }
+    .thermal-receipt {
+      background: #fff;
+      color: #000;
+      font-family: 'Courier New', Courier, monospace;
+      padding: 1.25rem;
+      border-radius: 4px;
+      max-width: 330px;
+      margin: 0 auto;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+    }
+    @keyframes pulseAlert {
+      0%, 100% { border-color: #ef4444; box-shadow: 0 0 15px rgba(239, 68, 68, 0.4); }
+      50% { border-color: #f97316; box-shadow: 0 0 25px rgba(249, 115, 22, 0.85); }
+    }
+    .pulse-alert { animation: pulseAlert 1.5s infinite; }
+  </style>
+</head>
+<body class="min-h-screen p-2 sm:p-4">
+
+  <!-- NAVBAR HEADER -->
+  <header class="glass-card mb-4 p-3 px-4 flex flex-wrap items-center justify-between gap-3 sticky top-0 z-40">
+    <div class="flex items-center gap-3">
+      <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-red-600 via-orange-500 to-amber-400 p-0.5 flex items-center justify-center shadow-lg shadow-orange-600/30">
+        <div class="w-full h-full bg-slate-950 rounded-[10px] flex items-center justify-center">
+          <span class="text-xl">🌮</span>
+        </div>
+      </div>
+      <div>
+        <h1 class="text-xl font-black text-white flex items-center gap-1.5 leading-none">
+          TA CABRÓN <span class="text-[10px] bg-amber-500/20 text-amber-400 border border-amber-500/40 px-1.5 py-0.5 rounded-full uppercase">Sabor Chingón</span>
+        </h1>
+        <p class="text-xs text-slate-400 font-medium">POS, Cocina & Control de Nómina</p>
+      </div>
+    </div>
+
+    <!-- 4 TABS DE NAVEGACIÓN -->
+    <nav class="flex items-center bg-slate-900 p-1 rounded-xl border border-slate-800 overflow-x-auto">
+      <button id="btn-tab-mesero" onclick="switchTab('mesero')" class="px-3.5 py-2 rounded-lg font-bold text-xs bg-amber-500 text-black shadow-md transition whitespace-nowrap">
+        📱 Mesero (POS)
+      </button>
+      <button id="btn-tab-cocina" onclick="switchTab('cocina')" class="px-3.5 py-2 rounded-lg font-bold text-xs text-slate-400 hover:text-white flex items-center gap-1.5 transition whitespace-nowrap">
+        👨‍🍳 Cocina (KDS) <span id="kds-badge" class="bg-red-500 text-white px-1.5 py-0.5 rounded-full text-[10px] font-extrabold hidden">0</span>
+      </button>
+      <button id="btn-tab-caja" onclick="switchTab('caja')" class="px-3.5 py-2 rounded-lg font-bold text-xs text-slate-400 hover:text-white transition whitespace-nowrap">
+        📊 Caja & Cierre
+      </button>
+      <button id="btn-tab-personal" onclick="switchTab('personal')" class="px-3.5 py-2 rounded-lg font-bold text-xs text-slate-400 hover:text-white flex items-center gap-1 transition whitespace-nowrap">
+        ⏰ Personal & Nómina
+      </button>
+    </nav>
+  </header>
+
+  <!-- CONTENIDO PRINCIPAL DINÁMICO -->
+  <main id="app-content" class="max-w-7xl mx-auto"></main>
+
+  <!-- MODAL DE COBRO DE MESA CON AUTOCOMPLETADO DE CLIENTE -->
+  <div id="modal-cobro" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="glass-card w-full max-w-lg p-5 space-y-4 border-amber-500/40 max-h-[92vh] overflow-y-auto">
+      <div class="flex justify-between items-center border-b border-slate-800 pb-2">
+        <h3 class="font-extrabold text-lg text-white flex items-center gap-2">
+          <span>💵</span> Cobrar Mesa: <span id="cobro-mesa-nombre" class="text-amber-400 font-mono"></span>
+        </h3>
+        <button onclick="cerrarModalCobro()" class="text-slate-400 hover:text-white text-lg">✕</button>
+      </div>
+
+      <div id="cobro-detalles" class="space-y-1.5 text-xs bg-slate-950 p-2.5 rounded-xl border border-slate-800 max-h-32 overflow-y-auto"></div>
+
+      <!-- FORMULARIO CLIENTE & AUTOCOMPLETADO -->
+      <div class="bg-slate-900/90 p-3 rounded-2xl border border-slate-800 space-y-2">
+        <div class="flex justify-between items-center">
+          <label class="text-[11px] font-black uppercase text-amber-400 flex items-center gap-1">
+            <span>👤</span> Datos del Cliente (Fidelización & Factura)
+          </label>
+          <button type="button" onclick="cargarConsumidorFinal()" class="text-[10px] text-slate-400 hover:text-amber-300 underline font-semibold">
+            Consumidor Final (Sin datos)
+          </button>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+          <div>
+            <label class="block text-[10px] text-slate-400 font-bold mb-0.5">C.C. / NIT / Doc:</label>
+            <input type="text" id="cobro-cliente-doc" oninput="buscarClienteAutocompletar(this.value)" placeholder="Ej. 10203040" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-1.5 text-xs font-mono font-bold text-white focus:outline-none focus:border-amber-500">
+          </div>
+          <div>
+            <label class="block text-[10px] text-slate-400 font-bold mb-0.5">Nombre Completo:</label>
+            <input type="text" id="cobro-cliente-nombre" placeholder="Ej. Juan Pérez" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-1.5 text-xs font-bold text-white focus:outline-none focus:border-amber-500">
+          </div>
+          <div>
+            <label class="block text-[10px] text-slate-400 font-bold mb-0.5">Teléfono (WhatsApp):</label>
+            <input type="tel" id="cobro-cliente-tel" placeholder="Ej. 3001234567" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-1.5 text-xs font-bold text-white focus:outline-none focus:border-amber-500">
+          </div>
+        </div>
+
+        <div id="autocomplete-feedback" class="text-[10px] text-amber-300 font-bold hidden flex items-center gap-1">
+          <span>👑</span> Cliente frecuente encontrado. Datos cargados automáticamente.
+        </div>
+      </div>
+
+      <!-- MÉTODO DE PAGO Y CAMBIO -->
+      <div class="space-y-3">
+        <div>
+          <label class="block text-xs font-bold text-slate-400 mb-1">Método de Pago</label>
+          <div class="grid grid-cols-3 gap-2">
+            <button type="button" onclick="seleccionarMetodoPago('Efectivo')" id="btn-pago-efectivo" class="py-2 rounded-xl text-xs font-bold border border-amber-500 bg-amber-500/20 text-amber-300">💵 Efectivo</button>
+            <button type="button" onclick="seleccionarMetodoPago('Tarjeta')" id="btn-pago-tarjeta" class="py-2 rounded-xl text-xs font-bold border border-slate-800 bg-slate-900 text-slate-400">💳 Tarjeta</button>
+            <button type="button" onclick="seleccionarMetodoPago('Transferencia')" id="btn-pago-transferencia" class="py-2 rounded-xl text-xs font-bold border border-slate-800 bg-slate-900 text-slate-400">📲 Transf.</button>
+          </div>
+        </div>
+
+        <div id="bloque-cambio" class="space-y-1.5">
+          <label class="block text-xs font-bold text-slate-400">Paga con ($):</label>
+          <input type="number" id="input-paga-con" oninput="calcularCambioCobro()" placeholder="0.00" class="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-base font-bold font-mono text-white focus:outline-none focus:border-amber-500">
+          <div class="flex justify-between items-center text-xs font-bold bg-slate-900/60 p-2 rounded-lg">
+            <span class="text-slate-400">Cambio / Vueltos:</span>
+            <span id="label-cambio-cobro" class="text-emerald-400 font-mono text-base">$0.00</span>
+          </div>
+        </div>
+
+        <div class="flex justify-between items-center text-sm font-extrabold pt-2 border-t border-slate-800">
+          <span class="text-slate-400">TOTAL FACTURA:</span>
+          <span id="label-total-cobro" class="text-2xl font-mono text-amber-400">$0.00</span>
+        </div>
+      </div>
+
+      <div class="flex gap-2 pt-2">
+        <button type="button" onclick="cerrarModalCobro()" class="w-1/2 bg-slate-900 hover:bg-slate-800 text-slate-300 font-bold py-2.5 rounded-xl text-xs">Cancelar</button>
+        <button type="button" id="btn-confirmar-pago" onclick="confirmarPagoMesa()" class="w-1/2 bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white font-extrabold py-2.5 rounded-xl text-xs shadow-lg shadow-emerald-600/30">✓ FACTURAR & PAGAR</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL DE TICKET TÉRMICO -->
+  <div id="modal-ticket" class="fixed inset-0 bg-black/85 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="w-full max-w-sm space-y-3">
+      <div id="ticket-imprimible" class="thermal-receipt text-xs space-y-2"></div>
+      <div class="flex gap-2">
+        <button onclick="cerrarModalTicket()" class="w-1/2 bg-slate-800 text-white font-bold py-2.5 rounded-xl text-xs">Cerrar</button>
+        <button onclick="window.print()" class="w-1/2 bg-amber-500 hover:bg-amber-400 text-black font-extrabold py-2.5 rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-md">
+          <span>🖨️</span> Imprimir Ticket
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL EDITAR / AGREGAR EMPLEADO -->
+  <div id="modal-empleado" class="fixed inset-0 bg-black/85 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="glass-card w-full max-w-sm p-6 space-y-4 border-amber-500/40">
+      <div class="flex justify-between items-center border-b border-slate-800 pb-2">
+        <h3 id="titulo-modal-empleado" class="font-extrabold text-base text-white">Editar Empleado</h3>
+        <button onclick="cerrarModalEmpleado()" class="text-slate-400 hover:text-white text-lg">✕</button>
+      </div>
+
+      <form onsubmit="guardarFormularioEmpleado(event)" class="space-y-3">
+        <input type="hidden" id="emp-id">
+        <div>
+          <label class="block text-xs font-bold text-slate-400 mb-1">Nombre Completo</label>
+          <input type="text" id="emp-nombre" required placeholder="Ej. Carlos Martínez" class="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500">
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-400 mb-1">Cargo</label>
+          <select id="emp-cargo" class="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500">
+            <option value="Mesero">Mesero / Salón</option>
+            <option value="Taquero / Cocina">Taquero / Cocina</option>
+            <option value="Cajero / Encargado">Cajero / Encargado</option>
+            <option value="Ayudante General">Ayudante General</option>
+          </select>
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label class="block text-xs font-bold text-slate-400 mb-1">🔑 PIN (4 Dígitos)</label>
+            <input type="password" id="emp-pin" required maxlength="4" placeholder="1234" class="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-center text-base font-mono font-bold text-white focus:outline-none focus:border-amber-500">
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-emerald-400 mb-1">Valor por Hora ($)</label>
+            <input type="number" step="0.5" id="emp-tarifa" required placeholder="10.00" class="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-center text-base font-mono font-bold text-emerald-400 focus:outline-none focus:border-amber-500">
+          </div>
+        </div>
+
+        <div class="flex gap-2 pt-2">
+          <button type="button" onclick="cerrarModalEmpleado()" class="w-1/2 bg-slate-900 text-slate-300 font-bold py-2 rounded-xl text-xs">Cancelar</button>
+          <button type="submit" id="btn-submit-empleado" class="w-1/2 bg-amber-500 text-black font-extrabold py-2 rounded-xl text-xs shadow-md">Guardar Datos</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL CONFIGURAR URL SHEETS -->
+  <div id="modal-config-url" class="fixed inset-0 bg-black/85 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="glass-card w-full max-w-md p-6 space-y-4 border-amber-500/40">
+      <div class="flex justify-between items-center border-b border-slate-800 pb-2">
+        <h3 class="font-bold text-base text-white flex items-center gap-2">
+          <span>⚙️</span> Configurar Google Sheets Web App
+        </h3>
+        <button onclick="cerrarModalConfigUrl()" class="text-slate-400 hover:text-white text-lg">✕</button>
+      </div>
+      <p class="text-xs text-slate-400">Pega la URL de tu Web App generada al implementar Google Apps Script:</p>
+      <div>
+        <label class="block text-[11px] font-bold text-slate-300 mb-1">URL de Implementación (/exec):</label>
+        <input type="text" id="input-config-url" placeholder="https://script.google.com/macros/s/.../exec" class="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs font-mono text-white focus:outline-none focus:border-amber-500">
+      </div>
+      <div class="flex gap-2">
+        <button onclick="probarConexionSheets()" class="w-1/2 bg-slate-800 text-amber-300 font-bold py-2 rounded-xl text-xs">🔌 Probar Conexión</button>
+        <button onclick="guardarConfigUrl()" class="w-1/2 bg-amber-500 text-black font-extrabold py-2 rounded-xl text-xs">Guardar URL</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL REPORTE DE VENTAS POR PRODUCTO -->
+  <div id="modal-reporte-productos" class="fixed inset-0 bg-black/85 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="glass-card w-full max-w-2xl p-6 space-y-4 border-amber-500/40 max-h-[90vh] overflow-y-auto">
+      <div class="flex justify-between items-center border-b border-slate-800 pb-2">
+        <div>
+          <h3 class="font-black text-lg text-white flex items-center gap-2">
+            <span>📊</span> Historial de Ventas por Producto
+          </h3>
+          <p class="text-xs text-slate-400">Consolidado en tiempo real desde Google Sheets</p>
+        </div>
+        <button onclick="cerrarModalReporte()" class="text-slate-400 hover:text-white text-lg">✕</button>
+      </div>
+      <div id="contenido-reporte-productos" class="space-y-3">
+        <div class="text-center py-10 text-slate-400 text-xs">Cargando reporte desde Google Sheets...</div>
+      </div>
+      <div class="flex justify-end pt-2 border-t border-slate-800">
+        <button onclick="cerrarModalReporte()" class="bg-slate-800 text-slate-200 font-bold px-4 py-2 rounded-xl text-xs">Cerrar Reporte</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL TOP CLIENTES FRECUENTES -->
+  <div id="modal-top-clientes" class="fixed inset-0 bg-black/85 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="glass-card w-full max-w-2xl p-6 space-y-4 border-amber-500/40 max-h-[90vh] overflow-y-auto">
+      <div class="flex justify-between items-center border-b border-slate-800 pb-2">
+        <div>
+          <h3 class="font-black text-lg text-white flex items-center gap-2">
+            <span>👑</span> Clientes Que Más Nos Visitan (Ranking de Fidelidad)
+          </h3>
+          <p class="text-xs text-slate-400">Pestaña <code>Clientes_Frecuentes</code> de Google Sheets</p>
+        </div>
+        <button onclick="cerrarModalTopClientes()" class="text-slate-400 hover:text-white text-lg">✕</button>
+      </div>
+      <div id="contenido-top-clientes" class="space-y-3">
+        <div class="text-center py-10 text-slate-400 text-xs">Cargando ranking de clientes desde Google Sheets...</div>
+      </div>
+      <div class="flex justify-end pt-2 border-t border-slate-800">
+        <button onclick="cerrarModalTopClientes()" class="bg-slate-800 text-slate-200 font-bold px-4 py-2 rounded-xl text-xs">Cerrar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL FONDO INICIAL -->
+  <div id="modal-fondo-inicial" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="glass-card w-full max-w-sm p-5 space-y-3 border-amber-500/40">
+      <h3 class="font-bold text-base text-white flex items-center gap-2">
+        <span>💵</span> Fijar Fondo Inicial de Caja
+      </h3>
+      <p class="text-xs text-slate-400">Monto de efectivo con el que abre la caja en el turno.</p>
+      <div>
+        <label class="block text-xs font-semibold text-slate-400 mb-1">Monto en Efectivo ($)</label>
+        <input type="number" step="0.5" id="input-monto-fondo-inicial" placeholder="1500.00" class="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2.5 text-base font-bold font-mono text-white focus:outline-none focus:border-amber-500">
+      </div>
+      <div class="flex gap-2 pt-1">
+        <button onclick="cerrarModalFondoInicial()" class="w-1/2 bg-slate-900 text-slate-300 font-bold py-2 rounded-xl text-xs">Cancelar</button>
+        <button onclick="guardarFondoInicial()" class="w-1/2 bg-amber-500 text-black font-extrabold py-2 rounded-xl text-xs">Guardar Fondo</button>
+      </div>
+    </div>
+  </div>
+
+  <canvas id="snapshot-canvas" width="120" height="90" class="hidden"></canvas>
+
+  <script>
+    const DEFAULT_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbzENeK6Jl8okUPbuoUVB9c0T4VVyKa0RFTUXxRvJYShLMokrE4cyjIOE3EHUi6jcBindw/exec";
+
+    // MENÚ OFICIAL COMPLETO
+    const FULL_MENU = [
+      { id: 1, name: 'La Cabrona', price: 28000, category: 'Hamburguesas', description: 'Pan artesanal 105gr de carne de alta calidad, 105gr de birria ahumada, lechuga fresca, queso mozzarella, tortilla de maíz crocante, mermelada de tocineta en reducción de tequila, crema agria con aceite de cilantro.', image: 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=500' },
+      { id: 2, name: 'La Chingona', price: 28000, category: 'Hamburguesas', description: 'Pan artesanal de la abuela, queso mozzarella, queso de búfalo, guacamole de la casa, crema agria, encurtido de jalapeño, totopos de maíz, 190gr de doble carne de alta calidad, pico de gallo, lechuga fresca.', image: 'https://images.unsplash.com/photo-1586190848861-99aa4a171e90?w=500' },
+      { id: 3, name: 'La Catrina', price: 28000, category: 'Hamburguesas', description: 'Pan artesanal de la abuela, 150gr de carne con relleno de queso cheddar y queso mozzarella, bañada en salsa de tamarindo y cebolla dulce con amapola, aros de cebolla, lechuga y tomates frescos.', image: 'https://images.unsplash.com/photo-1550547660-d9450f859349?w=500' },
+      { id: 4, name: 'La Mestiza', price: 28000, category: 'Hamburguesas', description: 'Pan artesanal, 105gr de carne de alta calidad bañada en mole artesanal, chicharrón apanado crujiente, cebolla morada encurtida, chips de plátano verde crocante, crema agria, salsa kentucky, glaseado honey.', image: 'https://images.unsplash.com/photo-1594212699903-ec8a3eca50f5?w=500' },
+      { id: 5, name: 'Combo 1', price: 28000, category: 'Combos', description: '4 Tacos tradicionales + 1 Agua Fresca del día.', image: 'https://images.unsplash.com/photo-1551504734-5ee1c4a1479b?w=500' },
+      { id: 6, name: 'Combo 2', price: 50000, category: 'Combos', description: '8 Tacos tradicionales surtidos + 1 Agua Fresca grande.', image: 'https://images.unsplash.com/photo-1565299585323-38d6b0865b47?w=500' },
+      { id: 7, name: 'Combo 3', price: 53000, category: 'Combos', description: '4 Tacos + 1 Quesadilla con abundante queso + 2 Aguas Frescas.', image: 'https://images.unsplash.com/photo-1618040996337-56904b7850b9?w=500' },
+      { id: 8, name: 'Combo 4', price: 50000, category: 'Combos', description: '4 Tacos + 1 Orden de Nachos con queso y frijoles + 2 Aguas Frescas.', image: 'https://images.unsplash.com/photo-1513456852971-30c0b8199d4d?w=500' },
+      { id: 9, name: 'Combo Birria', price: 30000, category: 'Combos', description: '4 Tacos de Birria de costilla de res con consomé + 1 Agua Fresca.', image: 'https://images.unsplash.com/photo-1615870216519-2f9fa575fa5c?w=500' },
+      { id: 10, name: 'Combo Queso', price: 30000, category: 'Combos', description: '4 Tacos con costra de queso fundido + 1 Agua Fresca.', image: 'https://images.unsplash.com/photo-1599974579688-8dbdd335c77f?w=500' },
+	  { id: 36, name: 'Papitas Adiconales', price: 9000, category: 'Combos', description: 'Papitas Fritas a La Francesa.', image: 'https://6af069e584dbf461b655aab7.imgix.net/sandbox/NanoBanana-2026-11-08.png' },
+      { id: 11, name: 'Tacos (Unidad)', price: 7000, category: 'Fuertes', description: 'Taco mexicano tradicional en tortilla de maíz caliente con cilantro, cebolla picada y limón.', image: 'https://images.unsplash.com/photo-1551504734-5ee1c4a1479b?w=500' },
+      { id: 12, name: 'Burros XL', price: 22000, category: 'Fuertes', description: 'Burro grande envuelto en tortilla de harina con arroz mexicano, frijol, queso fundido y proteína.', image: 'https://images.unsplash.com/photo-1626700051175-6818013e1d4f?w=500' },
+      { id: 13, name: 'Quesadillas', price: 20000, category: 'Fuertes', description: 'Tortilla de harina dorada a la plancha rellena de abundante queso derretido y proteína.', image: 'https://images.unsplash.com/photo-1618040996337-56904b7850b9?w=500' },
+      { id: 14, name: 'Nachos Cabrones', price: 20000, category: 'Fuertes', description: 'Totopos crujientes bañados en queso fundido, frijoles refritos, pico de gallo, crema agria y guacamole.', image: 'https://images.unsplash.com/photo-1513456852971-30c0b8199d4d?w=500' },
+      { id: 15, name: 'Dorilocos', price: 22000, category: 'Fuertes', description: 'Bolsa de Doritos preparados con cueritos, cacahuates japoneses, pepino, jícama, limón, chamoy y salsas.', image: 'https://images.unsplash.com/photo-1565299585323-38d6b0865b47?w=500' },
+      { id: 16, name: 'Carnitas (Pernil Cerdo)', price: 7000, category: 'Proteínas', description: 'Pernil de cerdo confitado lentamente en su propia manteca con naranja y hierbas de olor.', image: 'https://images.unsplash.com/photo-1565299585323-38d6b0865b47?w=500' },
+      { id: 17, name: 'Suadero (Sobrebarriga)', price: 7000, category: 'Proteínas', description: 'Suave sobrebarriga de res cocida a fuego lento y dorada en el comal al momento de servir.', image: 'https://images.unsplash.com/photo-1551504734-5ee1c4a1479b?w=500' },
+      { id: 18, name: 'Pastor (Bondiola de Cerdo)', price: 7000, category: 'Proteínas', description: 'Bondiola de cerdo marinada en achiote tradicional, chiles secos, piña asada y especias.', image: 'https://images.unsplash.com/photo-1551504734-5ee1c4a1479b?w=500' },
+      { id: 19, name: 'Birria (Costilla de Res)', price: 9000, category: 'Proteínas', description: 'Costilla de res en adobo de chiles guajillo y ancho, cocinada hasta deshebrarse suavemente.', image: 'https://images.unsplash.com/photo-1615870216519-2f9fa575fa5c?w=500' },
+      { id: 20, name: 'Lengua de Res', price: 9000, category: 'Proteínas', description: 'Lengua de res tierna y jugosa cocinada al vapor con laurel, cebolla y pimienta gorda.', image: 'https://images.unsplash.com/photo-1565299585323-38d6b0865b47?w=500' },
+      { id: 21, name: 'Chicharrón Crujiente', price: 9000, category: 'Proteínas', description: 'Chicharrón de cerdo apanado crujiente con toque salado y limón.', image: 'https://images.unsplash.com/photo-1594212699903-ec8a3eca50f5?w=500' },
+      { id: 22, name: 'Tripa (Chunchurria)', price: 9000, category: 'Proteínas', description: 'Tripa de res bien lavada, cocida y frita al punto exacto de crocancia.', image: 'https://images.unsplash.com/photo-1551504734-5ee1c4a1479b?w=500' },
+      { id: 23, name: 'Tinga de Pollo', price: 7000, category: 'Proteínas', description: 'Pechuga deshebrada en sofrito de jitomate, cebolla caramelizada y ligero toque de chipotle.', image: 'https://images.unsplash.com/photo-1586190848861-99aa4a171e90?w=500' },
+      { id: 24, name: 'Oreja de Cerdo', price: 7000, category: 'Proteínas', description: 'Oreja de cerdo picada suave y pasada por la plancha con cebolla y cilantro.', image: 'https://images.unsplash.com/photo-1551504734-5ee1c4a1479b?w=500' },
+      { id: 25, name: 'Agua Fresca Mexicana', price: 8000, category: 'Bebidas', description: 'Sabores: Horchata cremosa, Tamarindo Michelado, Jamaica o Piña fresca.', image: 'https://images.unsplash.com/photo-1514362545857-3bc16c4c7d1b?w=500' },
+      { id: 26, name: 'Coca Cola', price: 5000, category: 'Bebidas', description: 'Refresco clásico 350ml bien frío.', image: 'https://images.unsplash.com/photo-1622483767028-3f66f32aef97?w=500' },
+      { id: 27, name: 'Postobón', price: 5000, category: 'Bebidas', description: 'Sabores tradicionales Manzana o Uva.', image: 'https://images.unsplash.com/photo-1581009146145-b5ef050c2e1e?w=500' },
+      { id: 28, name: 'Agua Natural', price: 4000, category: 'Bebidas', description: 'Botella de agua purificada fresca 500ml.', image: 'https://images.unsplash.com/photo-1548839140-29a749e1bc4e?w=500' },
+      { id: 29, name: 'Agua con Gas', price: 4000, category: 'Bebidas', description: 'Agua mineral con gas refrescante 500ml.', image: 'https://images.unsplash.com/photo-1559839914-1b346d65588e?w=500' },
+      { id: 30, name: 'Soda Hatsu', price: 6000, category: 'Bebidas', description: 'Soda saborizada artesanal con gas fino.', image: 'https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?w=500' },
+      { id: 31, name: 'Cerveza Corona', price: 10000, category: 'Bebidas', description: 'Cerveza mexicana servida con limón.', image: 'https://images.unsplash.com/photo-1608270586620-248524c67de9?w=500' },
+      { id: 32, name: 'Shot de Tequila', price: 7000, category: 'Bebidas', description: 'Tequila reposado 1.5 oz con sal y limón.', image: 'https://images.unsplash.com/photo-1514362545857-3bc16c4c7d1b?w=500' },
+      { id: 33, name: 'Adición: Guacamole', price: 3000, category: 'Bebidas', description: 'Porción de guacamole fresco con pico de gallo.', image: 'https://images.unsplash.com/photo-1565299585323-38d6b0865b47?w=500' },
+      { id: 34, name: 'Adición: Queso Extra', price: 6000, category: 'Bebidas', description: 'Porción extra de queso fundido o mozzarella.', image: 'https://images.unsplash.com/photo-1618040996337-56904b7850b9?w=500' },
+      { id: 35, name: 'Adición: Salsas', price: 3000, category: 'Bebidas', description: 'Trío de salsas caseras verde, roja y habanero.', image: 'https://images.unsplash.com/photo-1551504734-5ee1c4a1479b?w=500' }
+    ];
+
+    const TABLES = ['Mesa 1', 'Mesa 2', 'Mesa 3', 'Mesa 4', 'Mesa 5', 'Mesa 6', 'Mesa 7', 'Mesa 8'];
+    const CATEGORIES = ['Todos', 'Hamburguesas', 'Combos', 'Fuertes', 'Proteínas', 'Bebidas'];
+
+    const DEFAULT_EMPLOYEES = [
+      { id: 'EMP-1', name: 'Carlos Martínez', role: 'Mesero', pin: '1001', hourlyRate: 10.00 },
+      { id: 'EMP-2', name: 'Miguel Ángel Ruiz', role: 'Taquero / Cocina', pin: '1002', hourlyRate: 14.00 },
+      { id: 'EMP-3', name: 'Ana Gómez', role: 'Cajera / Encargada', pin: '1003', hourlyRate: 12.00 },
+      { id: 'EMP-4', name: 'Jorge López', role: 'Ayudante General', pin: '1004', hourlyRate: 9.00 }
+    ];
+
+    let state = {
+      activeTab: 'mesero',
+      periodoNomina: 'quincena', // 'dia', 'semana', 'quincena', 'mes'
+      selectedTable: 'Mesa 1',
+      selectedCategory: 'Todos',
+      searchQuery: '',
+      cart: [],
+      tableCarts: {},
+      orders: JSON.parse(localStorage.getItem('tc_orders') || '[]'),
+      expenses: JSON.parse(localStorage.getItem('tc_expenses') || '[]'),
+      customers: JSON.parse(localStorage.getItem('tc_customers') || '[]'),
+      employees: JSON.parse(localStorage.getItem('tc_employees')) || DEFAULT_EMPLOYEES,
+      attendance: JSON.parse(localStorage.getItem('tc_attendance') || '[]'),
+      initialCash: parseFloat(localStorage.getItem('tc_initial_cash') || '1500.00'),
+      webAppUrl: localStorage.getItem('tc_sheets_url') || DEFAULT_WEB_APP_URL,
+      metodoPagoCobro: 'Efectivo',
+      ordenACobrar: null,
+      pinMarcador: '',
+      camStream: null
+    };
+
+    function playChimeSound() {
+      try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        [659, 783, 1046].forEach((freq, idx) => {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.frequency.setValueAtTime(freq, ctx.currentTime + idx * 0.12);
+          gain.gain.setValueAtTime(0.25, ctx.currentTime + idx * 0.12);
+          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + idx * 0.12 + 0.45);
+          osc.connect(gain); gain.connect(ctx.destination);
+          osc.start(ctx.currentTime + idx * 0.12);
+          osc.stop(ctx.currentTime + idx * 0.12 + 0.5);
+        });
+      } catch(e){}
+    }
+
+    const channel = new BroadcastChannel('tc_pos_channel');
+    channel.onmessage = (e) => {
+      if (e.data.type === 'SYNC_ALL') {
+        state.orders = JSON.parse(localStorage.getItem('tc_orders') || '[]');
+        state.expenses = JSON.parse(localStorage.getItem('tc_expenses') || '[]');
+        state.customers = JSON.parse(localStorage.getItem('tc_customers') || '[]');
+        state.employees = JSON.parse(localStorage.getItem('tc_employees')) || DEFAULT_EMPLOYEES;
+        state.attendance = JSON.parse(localStorage.getItem('tc_attendance') || '[]');
+        state.initialCash = parseFloat(localStorage.getItem('tc_initial_cash') || '1500.00');
+        playChimeSound();
+        render();
+      }
+    };
+
+    function notifySync() {
+      localStorage.setItem('tc_orders', JSON.stringify(state.orders));
+      localStorage.setItem('tc_expenses', JSON.stringify(state.expenses));
+      localStorage.setItem('tc_customers', JSON.stringify(state.customers));
+      localStorage.setItem('tc_employees', JSON.stringify(state.employees));
+      localStorage.setItem('tc_attendance', JSON.stringify(state.attendance));
+      localStorage.setItem('tc_initial_cash', state.initialCash);
+      channel.postMessage({ type: 'SYNC_ALL' });
+    }
+
+    // --- ENVÍO SEGURO A GOOGLE SHEETS ---
+    async function enviarAGoogleSheets(payload) {
+      if (!state.webAppUrl || state.webAppUrl.includes("TU_URL_AQUI")) {
+        console.warn("URL no configurada");
+        return { status: "error", message: "URL no configurada" };
+      }
+      try {
+        const res = await fetch(state.webAppUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify(payload)
+        });
+        return await res.json();
+      } catch (err) {
+        try {
+          await fetch(state.webAppUrl, {
+            method: 'POST',
+            mode: 'no-cors',
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+            body: JSON.stringify(payload)
+          });
+          return { status: "success", fallback: true };
+        } catch(e2) {
+          return { status: "error", message: e2.message };
+        }
+      }
+    }
+
+    let isPinAuthenticated = false;
+
+    function switchTab(tab) {
+      if (tab === 'caja' && !isPinAuthenticated) {
+        const pin = prompt("🔒 ACCESO A CAJA\nPIN Administrador (1234):");
+        if (pin === '1234') {
+          isPinAuthenticated = true;
+        } else if (pin !== null) {
+          alert("❌ PIN incorrecto.");
+          return;
+        } else {
+          return;
+        }
+      }
+
+      if (state.activeTab === 'personal' && tab !== 'personal') {
+        detenerCamara();
+      }
+
+      state.activeTab = tab;
+      ['mesero', 'cocina', 'caja', 'personal'].forEach(t => {
+        const btn = document.getElementById(`btn-tab-${t}`);
+        if (btn) {
+          if (t === tab) {
+            btn.className = "px-3.5 py-2 rounded-lg font-bold text-xs bg-amber-500 text-black shadow-md transition whitespace-nowrap";
+          } else {
+            btn.className = "px-3.5 py-2 rounded-lg font-bold text-xs text-slate-400 hover:text-white transition whitespace-nowrap";
+          }
+        }
+      });
+      render();
+    }
+
+    // --- GESTIÓN CONTINUA DE LA CÁMARA FRONTAL (COMPATIBLE CON NAVEGADORES EXTERNOS) ---
+    async function conectarCamaraVideo() {
+      const video = document.getElementById('camara-checador');
+      const badge = document.getElementById('cam-status-badge');
+      const aviso = document.getElementById('cam-aviso-seguridad');
+      if (!video) return;
+
+      // 1. Verificar si el navegador soporta navigator.mediaDevices o si está en file:///
+      const esProtocoloLocal = window.location.protocol === 'file:';
+      const esContextoSeguro = window.isSecureContext || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        console.warn("navigator.mediaDevices.getUserMedia no soportado o contexto no seguro (requiere HTTPS o localhost).");
+        if (badge) {
+          badge.className = "text-[10px] bg-rose-500/20 text-rose-300 border border-rose-500/30 px-2.5 py-0.5 rounded-full font-bold cursor-pointer";
+          badge.innerHTML = esProtocoloLocal ? "⚠️ Requiere HTTPS / Netlify" : "⚪ Cámara Bloqueada";
+        }
+        if (aviso) {
+          aviso.classList.remove('hidden');
+          if (esProtocoloLocal) {
+            aviso.innerHTML = `
+              <div class="space-y-2 p-2">
+                <span class="text-3xl block">🔒</span>
+                <p class="text-xs font-black text-amber-400">Restricción de Seguridad del Navegador</p>
+                <p class="text-[11px] text-slate-300 max-w-xs leading-relaxed">
+                  Estás abriendo el archivo como <code class="bg-black/60 text-amber-300 px-1 py-0.5 rounded font-mono text-[10px]">file:///</code>. Por directiva de seguridad internacional (W3C), <b>Chrome, Edge, Safari y Firefox deshabilitan la cámara</b> en archivos locales sin servidor.
+                </p>
+                <div class="bg-slate-900 border border-slate-700/60 rounded-xl p-2.5 text-left text-[10px] text-slate-300 space-y-1">
+                  <p class="font-bold text-emerald-400">💡 ¿Cómo tener cámara activa?:</p>
+                  <p>1. <b>Sube el archivo a Netlify</b> (da HTTPS gratis automático) y la cámara abrirá de inmediato.</p>
+                  <p>2. O ábrelo con un servidor local como <b>VSCode Live Server</b> o <code class="text-amber-400 font-mono">npx serve</code>.</p>
+                </div>
+                <p class="text-[10px] text-emerald-400 font-bold">✅ El marcaje por PIN (4 dígitos) funciona al 100% sin cámara.</p>
+              </div>
+            `;
+          }
+        }
+        return;
+      }
+
+      // 2. Si ya hay stream activo
+      if (state.camStream && state.camStream.active) {
+        try {
+          video.srcObject = state.camStream;
+          video.muted = true;
+          video.setAttribute('playsinline', 'true');
+          await video.play();
+          if (badge) {
+            badge.className = "text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded-full font-bold";
+            badge.innerHTML = "📸 Cámara Activa";
+          }
+          if (aviso) aviso.classList.add('hidden');
+          return;
+        } catch (e) {
+          console.warn("Error reanudando stream existente:", e);
+        }
+      }
+
+      // 3. Solicitar stream con fallback automático de resolución y facingMode
+      let stream = null;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
+          audio: false
+        });
+      } catch (err1) {
+        console.warn("Intento con facingMode falló, intentando modo genérico (PC/USB webcam):", err1);
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: true,
+            audio: false
+          });
+        } catch (err2) {
+          console.warn("Error total obteniendo acceso a cámara:", err2);
+          if (badge) {
+            badge.className = "text-[10px] bg-amber-500/20 text-amber-300 border border-amber-500/30 px-2 py-0.5 rounded-full font-bold cursor-pointer hover:bg-amber-500/30";
+            badge.innerHTML = "⚠️ Clic para Permitir Cámara";
+          }
+          if (aviso) {
+            aviso.classList.remove('hidden');
+            aviso.innerHTML = `
+              <div class="space-y-2 p-2">
+                <span class="text-3xl block">📷</span>
+                <p class="text-xs font-bold text-white">Permiso de Cámara Pendiente</p>
+                <p class="text-[11px] text-slate-300 max-w-xs">
+                  Haz clic en el botón abajo y pulsa <b>"Permitir"</b> en el mensaje emergente de tu navegador.
+                </p>
+                <button type="button" onclick="conectarCamaraVideo()" class="px-3.5 py-1.5 bg-amber-500 hover:bg-amber-400 text-black font-extrabold text-xs rounded-xl shadow-md transition active:scale-95">
+                  📸 Activar Permiso Ahora
+                </button>
+                <p class="text-[10px] text-slate-400">Si lo rechazaste antes, dale clic al ícono de cámara o candado en la barra de direcciones.</p>
+              </div>
+            `;
+          }
+          return;
+        }
+      }
+
+      if (stream) {
+        state.camStream = stream;
+        video.srcObject = stream;
+        video.setAttribute('playsinline', 'true');
+        video.setAttribute('muted', 'true');
+        video.muted = true;
+        
+        video.onloadedmetadata = () => {
+          video.play().catch(e => console.warn("Video play diferido:", e));
+        };
+        video.play().catch(e => console.warn("Video play directo:", e));
+
+        if (badge) {
+          badge.className = "text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded-full font-bold animate-pulse";
+          badge.innerHTML = "📸 Cámara en Vivo";
+        }
+        if (aviso) aviso.classList.add('hidden');
+      }
+    }
+
+    function detenerCamara() {
+      if (state.camStream) {
+        state.camStream.getTracks().forEach(track => track.stop());
+        state.camStream = null;
+      }
+    }
+
+    function tomarFotoSelfie() {
+      const video = document.getElementById('camara-checador');
+      const canvas = document.getElementById('snapshot-canvas');
+      if (!video || !canvas || video.videoWidth === 0) return 'Sin captura';
+      try {
+        canvas.width = 120;
+        canvas.height = 90;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(video, 0, 0, 120, 90);
+        return canvas.toDataURL('image/jpeg', 0.4);
+      } catch (e) {
+        return 'Sin captura';
+      }
+    }
+
+    // --- TECLADO NUMÉRICO TÁCTIL (RELOJ CHECADOR) ---
+    function presionarDigitoPin(digito) {
+      if (state.pinMarcador.length < 4) {
+        state.pinMarcador += digito;
+        actualizarPantallaMarcador();
+      }
+    }
+
+    function borrarDigitoPin() {
+      state.pinMarcador = state.pinMarcador.slice(0, -1);
+      actualizarPantallaMarcador();
+    }
+
+    function limpiarPinMarcador() {
+      state.pinMarcador = '';
+      actualizarPantallaMarcador();
+    }
+
+    function actualizarPantallaMarcador() {
+      const input = document.getElementById('display-pin-marcador');
+      const info = document.getElementById('info-empleado-marcador');
+      const btnEntrada = document.getElementById('btn-marcar-entrada');
+      const btnSalida = document.getElementById('btn-marcar-salida');
+      if (!input) return;
+
+      input.value = '•'.repeat(state.pinMarcador.length);
+
+      if (state.pinMarcador.length === 4) {
+        const emp = state.employees.find(e => e.pin === state.pinMarcador);
+        if (emp) {
+          const turnoActivo = state.attendance.find(a => a.empId === emp.id && a.status === 'open');
+          info.innerHTML = `
+            <div class="p-2.5 rounded-xl bg-slate-900 border border-slate-800 text-xs text-center space-y-1">
+              <span class="font-extrabold text-white block text-sm">👤 ${emp.name}</span>
+              <span class="text-amber-400 font-bold block">${emp.role} • $${emp.hourlyRate.toFixed(2)}/hora</span>
+              <span class="inline-block px-2.5 py-0.5 rounded-full font-bold text-[10px] ${turnoActivo ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40' : 'bg-slate-800 text-slate-400'}">
+                ${turnoActivo ? `🟢 En turno desde las ${turnoActivo.inTime}` : '⚪ Fuera de turno'}
+              </span>
+            </div>
+          `;
+
+          if (turnoActivo) {
+            btnEntrada.className = "py-3 rounded-xl bg-slate-800 text-slate-500 font-bold text-xs opacity-50";
+            btnSalida.className = "py-3 rounded-xl bg-rose-600 hover:bg-rose-500 font-black text-xs text-white shadow-lg shadow-rose-600/30 ring-2 ring-rose-400";
+          } else {
+            btnEntrada.className = "py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 font-black text-xs text-white shadow-lg shadow-emerald-600/30 ring-2 ring-emerald-400";
+            btnSalida.className = "py-3 rounded-xl bg-slate-800 text-slate-500 font-bold text-xs opacity-50";
+          }
+        } else {
+          info.innerHTML = `<p class="text-xs text-rose-400 font-bold text-center">❌ PIN no reconocido</p>`;
+        }
+      } else {
+        info.innerHTML = '';
+        if (btnEntrada) btnEntrada.className = "py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 font-black text-xs text-white shadow-lg shadow-emerald-600/30";
+        if (btnSalida) btnSalida.className = "py-3 rounded-xl bg-rose-600 hover:bg-rose-500 font-black text-xs text-white shadow-lg shadow-rose-600/30";
+      }
+    }
+
+    // --- REGISTRAR ENTRADA / SALIDA CON VERIFICACIÓN ---
+    async function ejecutarMarcacion(tipo) {
+      if (state.pinMarcador.length !== 4) return alert("Por favor digita tu PIN de 4 dígitos.");
+      const emp = state.employees.find(e => e.pin === state.pinMarcador);
+      if (!emp) return alert("PIN incorrecto. Revisa con administración.");
+
+      const foto = tomarFotoSelfie();
+      const d = new Date();
+      const fechaHoy = d.toISOString().split('T')[0];
+      const horaStr = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+      let turnoActivo = state.attendance.find(a => a.empId === emp.id && a.status === 'open');
+
+      if (tipo === 'entrada') {
+        if (turnoActivo) {
+          return alert(`⚠️ ${emp.name} ya tiene un turno abierto hoy desde las ${turnoActivo.inTime}.\nDebes marcar SALIDA para cerrar ese turno.`);
+        }
+
+        const nuevoTurno = {
+          id: 'ATT-' + Date.now(),
+          empId: emp.id,
+          empName: emp.name,
+          role: emp.role,
+          date: fechaHoy,
+          inTime: horaStr,
+          inDateObj: d.toISOString(),
+          outTime: '',
+          hours: 0,
+          pay: 0,
+          status: 'open',
+          photo: foto
+        };
+
+        state.attendance.unshift(nuevoTurno);
+        limpiarPinMarcador();
+        notifySync();
+        playChimeSound();
+
+        const resSheets = await enviarAGoogleSheets({
+          action: "registrarAsistencia",
+          tipo: "entrada",
+          empleado: emp,
+          foto: foto
+        });
+
+        const msgSheets = (resSheets && resSheets.status === 'success') ? '\n☁️ Sincronizado en Google Sheets (Control_Asistencia)' : '';
+        alert(`✅ ENTRADA REGISTRADA\n👤 ${emp.name}\n⏰ Hora: ${horaStr}${msgSheets}`);
+        render();
+
+      } else if (tipo === 'salida') {
+        if (!turnoActivo) {
+          if (!confirm(`⚠️ ${emp.name} no tiene un turno de entrada abierto hoy.\n¿Registrar salida directa a las ${horaStr}?`)) return;
+        }
+
+        let horasTrabajadas = 8.0;
+        if (turnoActivo && turnoActivo.inDateObj) {
+          const ms = d.getTime() - new Date(turnoActivo.inDateObj).getTime();
+          horasTrabajadas = parseFloat((ms / (1000 * 60 * 60)).toFixed(2));
+        }
+
+        const pagoDia = parseFloat((horasTrabajadas * emp.hourlyRate).toFixed(2));
+
+        if (turnoActivo) {
+          turnoActivo.outTime = horaStr;
+          turnoActivo.hours = horasTrabajadas;
+          turnoActivo.pay = pagoDia;
+          turnoActivo.status = 'closed';
+        } else {
+          state.attendance.unshift({
+            id: 'ATT-' + Date.now(),
+            empId: emp.id,
+            empName: emp.name,
+            role: emp.role,
+            date: fechaHoy,
+            inTime: 'Directa',
+            outTime: horaStr,
+            hours: horasTrabajadas,
+            pay: pagoDia,
+            status: 'closed',
+            photo: foto
+          });
+        }
+
+        limpiarPinMarcador();
+        notifySync();
+        playChimeSound();
+
+        const resSheets = await enviarAGoogleSheets({
+          action: "registrarAsistencia",
+          tipo: "salida",
+          empleado: emp,
+          horasTrabajadas: horasTrabajadas,
+          foto: foto
+        });
+
+        const msgSheets = (resSheets && resSheets.status === 'success') ? '\n☁️ Sincronizado en Google Sheets (Control_Asistencia)' : '';
+        alert(`🏁 SALIDA REGISTRADA\n👤 ${emp.name}\n⏰ Horas hoy: ${horasTrabajadas} hrs\n💵 Pago turno: $${pagoDia.toFixed(2)}${msgSheets}`);
+        render();
+      }
+    }
+
+    // --- CÁLCULO DE PERIODOS (DÍA, SEMANA, QUINCENA, MES) ---
+    function calcularPeriodosCompletosEmpleado(empId) {
+      const hoy = new Date();
+      const hoyStr = hoy.toISOString().split('T')[0];
+
+      const diaMes = hoy.getDate();
+      const anio = hoy.getFullYear();
+      const mes = hoy.getMonth();
+      const inicioQuincena = diaMes <= 15 ? new Date(anio, mes, 1) : new Date(anio, mes, 16);
+
+      const diaSemanaIndex = hoy.getDay() === 0 ? 6 : hoy.getDay() - 1;
+      const inicioSemana = new Date(hoy);
+      inicioSemana.setDate(hoy.getDate() - diaSemanaIndex);
+      inicioSemana.setHours(0,0,0,0);
+
+      const inicioMes = new Date(anio, mes, 1);
+
+      const turnos = state.attendance.filter(a => a.empId === empId && a.status === 'closed');
+
+      let hDia = 0, hSemana = 0, hQuincena = 0, hMes = 0;
+
+      turnos.forEach(t => {
+        const fTurno = new Date(t.date + 'T00:00:00');
+        const h = parseFloat(t.hours) || 0;
+
+        if (t.date === hoyStr) hDia += h;
+        if (fTurno >= inicioSemana) hSemana += h;
+        if (fTurno >= inicioQuincena) hQuincena += h;
+        if (fTurno >= inicioMes) hMes += h;
+      });
+
+      return {
+        dia: parseFloat(hDia.toFixed(2)),
+        semana: parseFloat(hSemana.toFixed(2)),
+        quincena: parseFloat(hQuincena.toFixed(2)),
+        mes: parseFloat(hMes.toFixed(2))
+      };
+    }
+
+    function cambiarPeriodoNomina(p) {
+      state.periodoNomina = p;
+      render();
+    }
+
+    function enviarReciboNominaWhatsApp(emp) {
+      const horas = calcularPeriodosCompletosEmpleado(emp.id);
+      const per = state.periodoNomina;
+
+      let horasPeriodo = horas[per];
+      let nombrePeriodo = "Día de Hoy";
+      if (per === 'semana') nombrePeriodo = "Semana en Curso";
+      else if (per === 'quincena') nombrePeriodo = "Quincena en Curso";
+      else if (per === 'mes') nombrePeriodo = "Mes en Curso";
+
+      const totalPagar = (horasPeriodo * emp.hourlyRate).toFixed(2);
+
+      const texto = `🧾 *DESPRENDIBLE DE PAGO (${nombrePeriodo.toUpperCase()})*
+📍 *TA CABRÓN 🌮*
+👤 *Empleado:* ${emp.name}
+💼 *Cargo:* ${emp.role}
+
+⏱️ *RESUMEN DE HORAS TRABAJADAS:*
+• Horas Hoy: ${horas.dia} hrs ($${(horas.dia * emp.hourlyRate).toFixed(2)})
+• Horas Esta Semana: ${horas.semana} hrs ($${(horas.semana * emp.hourlyRate).toFixed(2)})
+• Horas Esta Quincena: ${horas.quincena} hrs ($${(horas.quincena * emp.hourlyRate).toFixed(2)})
+• Horas Este Mes: ${horas.mes} hrs ($${(horas.mes * emp.hourlyRate).toFixed(2)})
+
+💵 *Tarifa por Hora:* $${emp.hourlyRate.toFixed(2)}
+💰 *TOTAL A COBRAR (${nombrePeriodo}):* *$${totalPagar}*
+
+¡Gracias por tu entrega y dedicación en el equipo! 🔥`;
+
+      window.open(`https://wa.me/?text=${encodeURIComponent(texto)}`, '_blank');
+    }
+
+    // --- GESTIÓN DE EMPLEADOS ---
+    function abrirModalNuevoEmpleado() {
+      document.getElementById('emp-id').value = 'EMP-' + (state.employees.length + 1);
+      document.getElementById('emp-nombre').value = '';
+      document.getElementById('emp-cargo').value = 'Mesero';
+      document.getElementById('emp-pin').value = '';
+      document.getElementById('emp-tarifa').value = '10.00';
+      document.getElementById('titulo-modal-empleado').textContent = 'Registrar Nuevo Empleado';
+      document.getElementById('modal-empleado').classList.remove('hidden');
+    }
+
+    function abrirModalEditarEmpleado(emp) {
+      document.getElementById('emp-id').value = emp.id;
+      document.getElementById('emp-nombre').value = emp.name;
+      document.getElementById('emp-cargo').value = emp.role;
+      document.getElementById('emp-pin').value = emp.pin;
+      document.getElementById('emp-tarifa').value = emp.hourlyRate;
+      document.getElementById('titulo-modal-empleado').textContent = `Editar Empleado: ${emp.name}`;
+      document.getElementById('modal-empleado').classList.remove('hidden');
+    }
+
+    function cerrarModalEmpleado() {
+      document.getElementById('modal-empleado').classList.add('hidden');
+    }
+
+    async function guardarFormularioEmpleado(e) {
+      e.preventDefault();
+      const btn = document.getElementById('btn-submit-empleado');
+      btn.disabled = true;
+      btn.textContent = "Guardando...";
+
+      const id = document.getElementById('emp-id').value;
+      const name = document.getElementById('emp-nombre').value.trim();
+      const role = document.getElementById('emp-cargo').value;
+      const pin = document.getElementById('emp-pin').value.trim();
+      const hourlyRate = parseFloat(document.getElementById('emp-tarifa').value) || 10.00;
+
+      if (pin.length !== 4) {
+        btn.disabled = false;
+        btn.textContent = "Guardar Datos";
+        return alert("El PIN debe tener 4 dígitos.");
+      }
+
+      const idx = state.employees.findIndex(em => em.id === id);
+      const empData = { id, name, role, pin, hourlyRate };
+
+      if (idx !== -1) {
+        state.employees[idx] = empData;
+      } else {
+        state.employees.push(empData);
+      }
+
+      const resSheets = await enviarAGoogleSheets({
+        action: "guardarEmpleado",
+        empleado: empData
+      });
+
+      notifySync();
+      cerrarModalEmpleado();
+      render();
+
+      const msg = (resSheets && resSheets.status === 'success') ? '\n☁️ Guardado en Google Sheets (Pestaña Empleados)' : '';
+      alert(`✅ Empleado ${name} guardado con éxito.${msg}`);
+    }
+
+    // --- POS & MESAS ---
+    function selectTable(tableName) {
+      state.tableCarts[state.selectedTable] = [...state.cart];
+      state.selectedTable = tableName;
+      state.cart = state.tableCarts[tableName] || [];
+      render();
+    }
+
+    function getTableStatus(t) {
+      const activeOrd = state.orders.find(o => o.tableName === t && o.paymentStatus !== 'paid');
+      const hasCart = (state.tableCarts[t] && state.tableCarts[t].length > 0) || (state.selectedTable === t && state.cart.length > 0);
+
+      if (activeOrd) {
+        if (activeOrd.status === 'delivered') return { label: 'Servida (Cobrar)', color: 'border-purple-500 bg-purple-950/40 text-purple-300' };
+        if (activeOrd.status === 'ready') return { label: 'Lista en Cocina', color: 'border-emerald-500 bg-emerald-950/40 text-emerald-300' };
+        return { label: 'En Cocina', color: 'border-amber-500 bg-amber-950/40 text-amber-300' };
+      }
+      if (hasCart) return { label: 'Comanda Abierta', color: 'border-sky-500 bg-sky-950/40 text-sky-300' };
+      return { label: 'Libre', color: 'border-slate-800 bg-slate-900 text-slate-400' };
+    }
+
+    function addToCart(itemId) {
+      const item = FULL_MENU.find(i => i.id === itemId);
+      const existing = state.cart.find(c => c.id === itemId);
+      if (existing) {
+        existing.qty++;
+      } else {
+        state.cart.push({ ...item, qty: 1, note: '' });
+      }
+      state.tableCarts[state.selectedTable] = [...state.cart];
+      render();
+    }
+
+    function changeQty(itemId, delta) {
+      const idx = state.cart.findIndex(c => c.id === itemId);
+      if (idx !== -1) {
+        state.cart[idx].qty += delta;
+        if (state.cart[idx].qty <= 0) state.cart.splice(idx, 1);
+      }
+      state.tableCarts[state.selectedTable] = [...state.cart];
+      render();
+    }
+
+    function editItemNote(itemId) {
+      const item = state.cart.find(c => c.id === itemId);
+      if (!item) return;
+      const note = prompt(`Nota de cocina para "${item.name}":\n(Ej. Sin cebolla, salsa aparte)`, item.note || '');
+      if (note !== null) {
+        item.note = note.trim();
+        state.tableCarts[state.selectedTable] = [...state.cart];
+        render();
+      }
+    }
+
+    function clearCart() {
+      if (state.cart.length === 0) return;
+      if (confirm(`¿Vaciar comanda de ${state.selectedTable}?`)) {
+        state.cart = [];
+        delete state.tableCarts[state.selectedTable];
+        render();
+      }
+    }
+
+    function sendToKitchen() {
+      if (state.cart.length === 0) return;
+      const total = state.cart.reduce((a, b) => a + (b.price * b.qty), 0);
+      const newOrder = {
+        id: 'ORD-' + Math.floor(1000 + Math.random() * 9000),
+        tableName: state.selectedTable,
+        items: [...state.cart],
+        total,
+        status: 'pending',
+        paymentStatus: 'unpaid',
+        paymentMethod: '',
+        customer: { doc: '', name: '', phone: '' },
+        createdAt: new Date().toISOString()
+      };
+      state.orders.unshift(newOrder);
+      state.cart = [];
+      delete state.tableCarts[state.selectedTable];
+
+      notifySync();
+      playChimeSound();
+      render();
+    }
+
+    function updateOrderStatus(id, newStatus) {
+      const ord = state.orders.find(o => o.id === id);
+      if (ord) {
+        ord.status = newStatus;
+        notifySync();
+        render();
+      }
+    }
+
+    // --- AUTOCOMPLETADO DE CLIENTE ---
+    function buscarClienteAutocompletar(query) {
+      const q = String(query || "").trim().toLowerCase();
+      const feedback = document.getElementById('autocomplete-feedback');
+      if (!q || q.length < 3) {
+        feedback?.classList.add('hidden');
+        return;
+      }
+
+      const encontrado = state.customers.find(c => 
+        (c.doc && c.doc.toLowerCase().includes(q)) || 
+        (c.phone && c.phone.includes(q)) ||
+        (c.name && c.name.toLowerCase().includes(q))
+      );
+
+      if (encontrado) {
+        document.getElementById('cobro-cliente-doc').value = encontrado.doc;
+        document.getElementById('cobro-cliente-nombre').value = encontrado.name;
+        document.getElementById('cobro-cliente-tel').value = encontrado.phone;
+        feedback.innerHTML = `<span>👑</span> Cliente frecuente: <b>${encontrado.name}</b>`;
+        feedback.classList.remove('hidden');
+      } else {
+        feedback?.classList.add('hidden');
+      }
+    }
+
+    function cargarConsumidorFinal() {
+      document.getElementById('cobro-cliente-doc').value = '222222222222';
+      document.getElementById('cobro-cliente-nombre').value = 'Consumidor Final';
+      document.getElementById('cobro-cliente-tel').value = '0000000';
+      document.getElementById('autocomplete-feedback')?.classList.add('hidden');
+    }
+
+    function abrirModalCobroParaMesa(tableName) {
+      const ord = state.orders.find(o => o.tableName === tableName && o.paymentStatus !== 'paid');
+      if (!ord) return alert(`La ${tableName} no tiene órdenes por cobrar.`);
+      state.ordenACobrar = ord;
+      document.getElementById('cobro-mesa-nombre').textContent = ord.tableName;
+      
+      const det = document.getElementById('cobro-detalles');
+      det.innerHTML = `
+        <div class="flex justify-between font-bold text-slate-300 border-b border-slate-800 pb-1 mb-1">
+          <span>Orden: ${ord.id}</span>
+          <span>${new Date(ord.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+        </div>
+        ${ord.items.map(i => `
+          <div class="flex justify-between py-0.5">
+            <span>${i.qty}x ${i.name}</span>
+            <span class="font-mono text-slate-300">$${(i.price * i.qty).toFixed(2)}</span>
+          </div>
+        `).join('')}
+      `;
+
+      document.getElementById('cobro-cliente-doc').value = ord.customer?.doc || '';
+      document.getElementById('cobro-cliente-nombre').value = ord.customer?.name || '';
+      document.getElementById('cobro-cliente-tel').value = ord.customer?.phone || '';
+      document.getElementById('autocomplete-feedback')?.classList.add('hidden');
+
+      document.getElementById('label-total-cobro').textContent = `$${ord.total.toFixed(2)}`;
+      document.getElementById('input-paga-con').value = '';
+      document.getElementById('label-cambio-cobro').textContent = '$0.00';
+      seleccionarMetodoPago('Efectivo');
+      document.getElementById('modal-cobro').classList.remove('hidden');
+    }
+
+    function cerrarModalCobro() {
+      document.getElementById('modal-cobro').classList.add('hidden');
+      state.ordenACobrar = null;
+    }
+
+    function seleccionarMetodoPago(m) {
+      state.metodoPagoCobro = m;
+      ['Efectivo', 'Tarjeta', 'Transferencia'].forEach(met => {
+        const btn = document.getElementById(`btn-pago-${met.toLowerCase()}`);
+        if (met === m) {
+          btn.className = "py-2 rounded-xl text-xs font-bold border border-amber-500 bg-amber-500/20 text-amber-300";
+        } else {
+          btn.className = "py-2 rounded-xl text-xs font-bold border border-slate-800 bg-slate-900 text-slate-400";
+        }
+      });
+      document.getElementById('bloque-cambio').style.display = (m === 'Efectivo') ? 'block' : 'none';
+      calcularCambioCobro();
+    }
+
+    function calcularCambioCobro() {
+      if (!state.ordenACobrar) return;
+      const total = state.ordenACobrar.total;
+      const paga = parseFloat(document.getElementById('input-paga-con').value) || 0;
+      const cambio = Math.max(0, paga - total);
+      document.getElementById('label-cambio-cobro').textContent = `$${cambio.toFixed(2)}`;
+    }
+
+    async function confirmarPagoMesa() {
+      if (!state.ordenACobrar) return;
+      const btn = document.getElementById('btn-confirmar-pago');
+      btn.disabled = true;
+      btn.textContent = "Facturando...";
+
+      const ord = state.ordenACobrar;
+      ord.paymentStatus = 'paid';
+      ord.paymentMethod = state.metodoPagoCobro;
+      ord.paidAt = new Date().toISOString();
+
+      const cDoc = document.getElementById('cobro-cliente-doc').value.trim() || '222222222222';
+      const cName = document.getElementById('cobro-cliente-nombre').value.trim() || 'Consumidor Final';
+      const cPhone = document.getElementById('cobro-cliente-tel').value.trim() || '0000000';
+
+      ord.customer = { doc: cDoc, name: cName, phone: cPhone };
+
+      if (cDoc !== '222222222222') {
+        const idx = state.customers.findIndex(c => c.doc === cDoc);
+        if (idx !== -1) {
+          state.customers[idx].name = cName;
+          state.customers[idx].phone = cPhone;
+          state.customers[idx].visitas = (state.customers[idx].visitas || 1) + 1;
+        } else {
+          state.customers.push({ doc: cDoc, name: cName, phone: cPhone, visitas: 1 });
+        }
+      }
+
+      enviarAGoogleSheets({ action: "registrarVenta", order: ord });
+
+      try {
+        confetti({ particleCount: 75, spread: 70, origin: { y: 0.6 } });
+      } catch(e){}
+
+      btn.disabled = false;
+      btn.textContent = "✓ FACTURAR & PAGAR";
+      cerrarModalCobro();
+      notifySync();
+      mostrarTicketTermico(ord);
+      render();
+    }
+
+    function mostrarTicketTermico(ord) {
+      const tDiv = document.getElementById('ticket-imprimible');
+      const fecha = new Date(ord.paidAt || ord.createdAt);
+      const cli = ord.customer || { name: 'Consumidor Final', doc: '222222222222', phone: '0000000' };
+
+      tDiv.innerHTML = `
+        <div class="text-center pb-2 border-b border-dashed border-zinc-400">
+          <h2 class="text-base font-black tracking-wider">TA CABRÓN 🌮</h2>
+          <p class="text-[10px]">AUTÉNTICO SABOR CHINGÓN</p>
+          <p class="text-[10px] text-zinc-600 font-bold">FACTURA DE VENTA / TICKET POS</p>
+        </div>
+
+        <div class="py-1 border-b border-dashed border-zinc-400 text-[11px] leading-tight space-y-0.5">
+          <div class="flex justify-between"><span>Comanda:</span><span class="font-bold">${ord.id}</span></div>
+          <div class="flex justify-between"><span>Mesa:</span><span class="font-bold">${ord.tableName}</span></div>
+          <div class="flex justify-between"><span>Fecha:</span><span>${fecha.toLocaleDateString()} ${fecha.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span></div>
+          <div class="flex justify-between"><span>Forma de Pago:</span><span class="font-bold">${ord.paymentMethod || 'Efectivo'}</span></div>
+        </div>
+
+        <div class="py-1 border-b border-dashed border-zinc-400 text-[11px] leading-tight space-y-0.5 bg-zinc-50 p-1.5 rounded">
+          <div class="text-[10px] font-bold text-zinc-700 uppercase">Datos del Cliente:</div>
+          <div class="flex justify-between"><span>Nombre:</span><span class="font-bold truncate max-w-[170px]">${cli.name}</span></div>
+          <div class="flex justify-between"><span>C.C. / DOC:</span><span class="font-bold font-mono">${cli.doc}</span></div>
+          ${cli.phone && cli.phone !== '0000000' ? `<div class="flex justify-between"><span>Teléfono:</span><span>${cli.phone}</span></div>` : ''}
+        </div>
+
+        <div class="py-1 space-y-1 border-b border-dashed border-zinc-400 text-[11px]">
+          <div class="flex justify-between font-bold text-[10px] border-b pb-0.5">
+            <span>CANT / DESCRIPCIÓN</span>
+            <span>TOTAL</span>
+          </div>
+          ${ord.items.map(i => `
+            <div class="flex justify-between">
+              <span>${i.qty}x ${i.name}</span>
+              <span class="font-mono">$${(i.price * i.qty).toFixed(2)}</span>
+            </div>
+            ${i.note ? `<div class="text-[9px] text-zinc-500 pl-2">↳ Nota: ${i.note}</div>` : ''}
+          `).join('')}
+        </div>
+
+        <div class="pt-2 text-right text-xs">
+          <div class="flex justify-between font-black text-sm">
+            <span>TOTAL A PAGAR:</span>
+            <span>$${ord.total.toFixed(2)}</span>
+          </div>
+        </div>
+
+        <div class="text-center pt-3 text-[10px] text-zinc-600 leading-tight">
+          <p>¡GRACIAS POR TU VISITA, CABRÓN!</p>
+          <p>🌮 Vuelve pronto 🌮</p>
+        </div>
+      `;
+      document.getElementById('modal-ticket').classList.remove('hidden');
+    }
+
+    function cerrarModalTicket() {
+      document.getElementById('modal-ticket').classList.add('hidden');
+    }
+
+    // --- FONDO INICIAL DE CAJA ---
+    function abrirModalFondoInicial() {
+      document.getElementById('input-monto-fondo-inicial').value = state.initialCash.toFixed(2);
+      document.getElementById('modal-fondo-inicial').classList.remove('hidden');
+    }
+
+    function cerrarModalFondoInicial() {
+      document.getElementById('modal-fondo-inicial').classList.add('hidden');
+    }
+
+    function guardarFondoInicial() {
+      const nuevoFondo = parseFloat(document.getElementById('input-monto-fondo-inicial').value);
+      if (isNaN(nuevoFondo) || nuevoFondo < 0) return alert('Por favor ingresa un monto válido.');
+      state.initialCash = nuevoFondo;
+      notifySync();
+      cerrarModalFondoInicial();
+      render();
+      alert(`✅ Fondo inicial fijado en: $${nuevoFondo.toFixed(2)}`);
+    }
+
+    // --- CONFIGURAR URL SHEETS ---
+    function abrirModalConfigUrl() {
+      document.getElementById('input-config-url').value = state.webAppUrl || '';
+      document.getElementById('modal-config-url').classList.remove('hidden');
+    }
+
+    function cerrarModalConfigUrl() {
+      document.getElementById('modal-config-url').classList.add('hidden');
+    }
+
+    function guardarConfigUrl() {
+      const url = document.getElementById('input-config-url').value.trim();
+      if (!url.startsWith('https://script.google.com/')) {
+        return alert('URL inválida. Debe ser el enlace generado en Google Apps Script que termina en /exec');
+      }
+      state.webAppUrl = url;
+      localStorage.setItem('tc_sheets_url', url);
+      cerrarModalConfigUrl();
+      alert('✅ URL de Google Sheets guardada.');
+    }
+
+    async function probarConexionSheets() {
+      const url = document.getElementById('input-config-url').value.trim();
+      if (!url) return alert('Ingresa una URL primero.');
+      try {
+        const res = await fetch(`${url}?action=test`);
+        const json = await res.json();
+        if (json.status === "success") {
+          alert('🟢 ¡Conexión Exitosa con Google Sheets!\n' + json.message);
+        } else {
+          alert('⚠️ Respuesta: ' + JSON.stringify(json));
+        }
+      } catch (err) {
+        alert('🔴 Error conectando con Google Sheets: ' + err.message + '\n\nVerifica que la implementación tenga acceso "Cualquier persona" (Anyone).');
+      }
+    }
+
+    // --- GASTOS DE CAJA ---
+    async function agregarGastoCaja(e) {
+      e.preventDefault();
+      const concepto = document.getElementById('gasto-concepto').value.trim();
+      const monto = parseFloat(document.getElementById('gasto-monto').value);
+      if (!concepto || isNaN(monto) || monto <= 0) return alert('Monto inválido.');
+
+      const nuevoGasto = { id: 'GAS-' + Date.now(), concepto, monto, fecha: new Date().toISOString() };
+      state.expenses.unshift(nuevoGasto);
+
+      enviarAGoogleSheets({ action: "guardarGasto", ...nuevoGasto });
+      notifySync();
+      render();
+    }
+
+    // --- CIERRE Z ---
+    async function reiniciarTurno() {
+      if (!confirm("⚠️ ¿Efectuar CIERRE DE TURNO (Corte Z)?\nSe enviará el balance a Google Sheets y se reiniciará la caja.")) return;
+
+      const paidOrders = state.orders.filter(o => o.paymentStatus === 'paid');
+      const ventasEfectivo = paidOrders.filter(o => o.paymentMethod === 'Efectivo').reduce((a, b) => a + b.total, 0);
+      const ventasDigitales = paidOrders.filter(o => o.paymentMethod !== 'Efectivo').reduce((a, b) => a + b.total, 0);
+      const ventasTotalesBrutas = ventasEfectivo + ventasDigitales;
+      const totalGastos = state.expenses.reduce((a, b) => a + b.monto, 0);
+      const ventasNetas = ventasTotalesBrutas - totalGastos;
+      const efectivoEnCaja = state.initialCash + ventasEfectivo - totalGastos;
+
+      await enviarAGoogleSheets({
+        action: "guardarCierre",
+        fondo_inicial: state.initialCash,
+        ventas_efectivo: ventasEfectivo,
+        ventas_digitales: ventasDigitales,
+        ventas_totales_brutas: ventasTotalesBrutas,
+        gastos: totalGastos,
+        ventas_netas: ventasNetas,
+        efectivo_en_caja: efectivoEnCaja,
+        total_comandas: state.orders.length
+      });
+
+      state.orders = [];
+      state.expenses = [];
+      state.cart = [];
+      state.tableCarts = {};
+      notifySync();
+      render();
+      alert("✅ Corte Z guardado en Google Sheets con éxito.");
+    }
+
+    // --- REPORTE DE VENTAS POR PRODUCTO ---
+    async function abrirModalReporteProductos() {
+      const modal = document.getElementById('modal-reporte-productos');
+      const contenedor = document.getElementById('contenido-reporte-productos');
+      modal.classList.remove('hidden');
+      contenedor.innerHTML = `<div class="text-center py-10 text-slate-400 text-xs">Consultando Google Sheets en tiempo real...</div>`;
+
+      try {
+        const res = await fetch(`${state.webAppUrl}?action=getReporteProductos`);
+        const data = await res.json();
+
+        if (!data || !data.productos || data.productos.length === 0) {
+          contenedor.innerHTML = `<p class="text-center py-8 text-slate-500 text-xs">No hay ventas registradas aún.</p>`;
+          return;
+        }
+
+        const maxUnidades = data.productos[0].unidades || 1;
+
+        contenedor.innerHTML = `
+          <div class="grid grid-cols-2 gap-3 mb-3 bg-slate-950 p-3 rounded-xl border border-slate-800 text-center">
+            <div>
+              <span class="text-[10px] text-slate-400 uppercase font-bold block">Platillos / Bebidas Vendidas</span>
+              <span class="text-xl font-black text-amber-400 font-mono">${data.unidadesTotales} unidades</span>
+            </div>
+            <div>
+              <span class="text-[10px] text-slate-400 uppercase font-bold block">Recaudación Bruta</span>
+              <span class="text-xl font-black text-emerald-400 font-mono">$${data.totalGlobal.toFixed(2)}</span>
+            </div>
+          </div>
+
+          <div class="space-y-2 max-h-[50vh] overflow-y-auto pr-1 text-xs">
+            ${data.productos.map((p, idx) => {
+              const medalla = idx === 0 ? '🥇' : (idx === 1 ? '🥈' : (idx === 2 ? '🥉' : `#${idx+1}`));
+              const porcentaje = Math.round((p.unidades / maxUnidades) * 100);
+
+              return `
+                <div class="bg-slate-900 border border-slate-800 p-2.5 rounded-xl space-y-1">
+                  <div class="flex justify-between items-center">
+                    <span class="font-extrabold text-white flex items-center gap-2">
+                      <span class="font-mono text-amber-400">${medalla}</span> ${p.platillo}
+                      <span class="text-[9px] bg-slate-800 text-slate-400 px-1.5 py-0.5 rounded uppercase font-semibold">${p.categoria}</span>
+                    </span>
+                    <span class="font-mono font-black text-emerald-400 text-sm">$${p.totalDinero.toFixed(2)}</span>
+                  </div>
+                  <div class="flex justify-between text-[11px] text-slate-400">
+                    <span>${p.unidades} unidades vendidas</span>
+                    <span>${porcentaje}% de popularidad</span>
+                  </div>
+                  <div class="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
+                    <div class="bg-gradient-to-r from-orange-500 to-amber-400 h-1.5 rounded-full" style="width: ${porcentaje}%"></div>
+                  </div>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        `;
+      } catch (err) {
+        contenedor.innerHTML = `<p class="text-center py-6 text-red-400 text-xs">Error consultando Google Sheets: ${err.message}</p>`;
+      }
+    }
+
+    function cerrarModalReporte() {
+      document.getElementById('modal-reporte-productos').classList.add('hidden');
+    }
+
+    // --- REPORTE DEL TOP DE CLIENTES QUE MÁS NOS VISITAN ---
+    async function abrirModalTopClientes() {
+      const modal = document.getElementById('modal-top-clientes');
+      const contenedor = document.getElementById('contenido-top-clientes');
+      modal.classList.remove('hidden');
+      contenedor.innerHTML = `<div class="text-center py-10 text-slate-400 text-xs">Consultando el Ranking de Clientes desde Google Sheets...</div>`;
+
+      try {
+        const res = await fetch(`${state.webAppUrl}?action=getTopClientes`);
+        const data = await res.json();
+
+        if (!data || !Array.isArray(data) || data.length === 0) {
+          contenedor.innerHTML = `<p class="text-center py-8 text-slate-500 text-xs">Aún no hay clientes frecuentes registrados en Google Sheets.</p>`;
+          return;
+        }
+
+        contenedor.innerHTML = `
+          <div class="space-y-2 max-h-[55vh] overflow-y-auto pr-1 text-xs">
+            ${data.map((c, idx) => {
+              const medalla = idx === 0 ? '🥇 #1 VIP' : (idx === 1 ? '🥈 #2' : (idx === 2 ? '🥉 #3' : `#${idx+1}`));
+              const cardBorder = idx === 0 ? 'border-amber-500 bg-amber-950/20' : 'border-slate-800 bg-slate-900';
+
+              let telLimpio = String(c.phone || '').replace(/\D/g, '');
+              if (telLimpio.length === 10 && telLimpio.startsWith('3')) telLimpio = '57' + telLimpio;
+
+              return `
+                <div class="border ${cardBorder} p-3 rounded-2xl flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <div class="flex items-center gap-2">
+                      <span class="font-mono font-black text-amber-400">${medalla}</span>
+                      <span class="font-extrabold text-sm text-white">${c.name}</span>
+                      <span class="text-[10px] bg-slate-800 px-2 py-0.5 rounded-full font-bold text-amber-300">${c.nivel}</span>
+                    </div>
+                    <p class="text-[11px] text-slate-400 mt-0.5">
+                      C.C.: <b class="font-mono text-slate-300">${c.doc}</b> • Tel: <b>${c.phone || 'Sin tel'}</b> • Última visita: ${c.ultimaVisita}
+                    </p>
+                  </div>
+
+                  <div class="flex items-center gap-3">
+                    <div class="text-right">
+                      <span class="block text-base font-black text-emerald-400 font-mono">${c.visitas} Visitas</span>
+                      <span class="block text-[10px] text-slate-400">Total: $${c.totalGastado.toFixed(2)}</span>
+                    </div>
+
+                    ${telLimpio ? `
+                      <a href="https://wa.me/${telLimpio}?text=${encodeURIComponent('¡Hola ' + c.name + '! 🌮 En Ta Cabrón queremos agradecerte por ser uno de nuestros clientes más fieles. ¡Te esperamos pronto para consentirte!')}" target="_blank" class="bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold px-3 py-1.5 rounded-xl text-xs flex items-center gap-1 shadow-md transition" title="Enviar promo o saludo por WhatsApp">
+                        <span>📲</span> Premiar
+                      </a>
+                    ` : ''}
+                  </div>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        `;
+      } catch (err) {
+        contenedor.innerHTML = `<p class="text-center py-6 text-red-400 text-xs">Error cargando clientes de Google Sheets: ${err.message}</p>`;
+      }
+    }
+
+    function cerrarModalTopClientes() {
+      document.getElementById('modal-top-clientes').classList.add('hidden');
+    }
+
+    // --- RENDERIZADO PRINCIPAL ---
+    function render() {
+      const container = document.getElementById('app-content');
+
+      const kdsBadge = document.getElementById('kds-badge');
+      const pendingKitchenCount = state.orders.filter(o => o.status === 'pending' || o.status === 'preparing').length;
+      if (kdsBadge) {
+        if (pendingKitchenCount > 0) {
+          kdsBadge.textContent = pendingKitchenCount;
+          kdsBadge.classList.remove('hidden');
+        } else {
+          kdsBadge.classList.add('hidden');
+        }
+      }
+
+      // 1. MESERO (POS)
+      if (state.activeTab === 'mesero') {
+        const cartTotal = state.cart.reduce((a, b) => a + (b.price * b.qty), 0);
+        const ordenPendienteMesa = state.orders.find(o => o.tableName === state.selectedTable && o.paymentStatus !== 'paid');
+
+        const platosFiltrados = FULL_MENU.filter(p => {
+          const matchCat = state.selectedCategory === 'Todos' || p.category === state.selectedCategory;
+          const matchSearch = p.name.toLowerCase().includes(state.searchQuery.toLowerCase()) || 
+                              p.description.toLowerCase().includes(state.searchQuery.toLowerCase());
+          return matchCat && matchSearch;
+        });
+
+        container.innerHTML = `
+          <div class="grid grid-cols-1 lg:grid-cols-12 gap-4">
+            
+            <div class="lg:col-span-8 space-y-3">
+              <!-- 8 MESAS CON SEMÁFORO -->
+              <div class="glass-card p-3">
+                <div class="flex justify-between items-center mb-2">
+                  <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider">
+                    Mesas (8) • Seleccionada: <span class="text-amber-400 font-extrabold">${state.selectedTable}</span>
+                  </h3>
+                  ${ordenPendienteMesa ? `
+                    <button onclick="abrirModalCobroParaMesa('${state.selectedTable}')" class="bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold px-3 py-1 rounded-lg text-xs shadow-md transition flex items-center gap-1">
+                      <span>💵</span> Cobrar ${state.selectedTable} ($${ordenPendienteMesa.total.toFixed(2)})
+                    </button>
+                  ` : ''}
+                </div>
+                
+                <div class="grid grid-cols-4 sm:grid-cols-8 gap-1.5">
+                  ${TABLES.map(t => {
+                    const status = getTableStatus(t);
+                    const isSelected = state.selectedTable === t;
+                    return `
+                      <button onclick="selectTable('${t}')" class="p-2 rounded-xl text-center border transition ${isSelected ? 'ring-2 ring-amber-400 font-extrabold' : ''} ${status.color}">
+                        <span class="block text-xs font-bold leading-tight">${t}</span>
+                        <span class="block text-[9px] opacity-75 truncate">${status.label}</span>
+                      </button>
+                    `;
+                  }).join('')}
+                </div>
+              </div>
+
+              <!-- BARRA DE CATEGORÍAS -->
+              <div class="flex flex-wrap items-center justify-between gap-2 bg-slate-950/80 p-2 rounded-2xl border border-slate-800">
+                <div class="flex items-center gap-1.5 overflow-x-auto py-1">
+                  ${CATEGORIES.map(cat => `
+                    <button onclick="state.selectedCategory='${cat}'; render();" class="px-3.5 py-1.5 rounded-full text-xs font-bold transition whitespace-nowrap ${state.selectedCategory === cat ? 'bg-amber-500 text-black shadow-md shadow-amber-500/20' : 'bg-slate-900 border border-slate-800 text-slate-300 hover:text-white'}">
+                      ${cat}
+                    </button>
+                  `).join('')}
+                </div>
+                
+                <div class="relative w-full sm:w-48">
+                  <input type="text" value="${state.searchQuery}" oninput="state.searchQuery=this.value; render();" placeholder="Buscar platillo..." class="w-full bg-slate-900 border border-slate-800 rounded-xl pl-7 pr-2 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-500">
+                  <span class="absolute left-2 top-2 text-xs text-slate-500">🔍</span>
+                </div>
+              </div>
+
+              <!-- PLATILLOS CON RECETAS COMPLETAS -->
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-[62vh] overflow-y-auto pr-1">
+                ${platosFiltrados.map(p => `
+                  <div onclick="addToCart(${p.id})" class="bg-zinc-900/95 border border-zinc-800 hover:border-amber-500/50 p-2.5 rounded-2xl cursor-pointer transition flex flex-col justify-between group shadow-sm hover:shadow-amber-500/5">
+                    <div class="flex gap-3">
+                      <img src="${p.image}" class="w-20 h-20 rounded-xl object-cover bg-zinc-800 border border-zinc-700/50 shrink-0" alt="${p.name}" />
+                      <div class="space-y-1">
+                        <div class="flex justify-between items-start gap-1">
+                          <h4 class="font-extrabold text-sm text-zinc-100 group-hover:text-amber-400 transition leading-snug">${p.name}</h4>
+                          <span class="text-sm font-black font-mono text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20 shrink-0">$${p.price.toFixed(2)}</span>
+                        </div>
+                        <p class="text-[11px] text-zinc-400 line-clamp-3 leading-relaxed">${p.description}</p>
+                      </div>
+                    </div>
+                    <div class="flex justify-between items-center pt-2 mt-2 border-t border-zinc-800/80 text-[10px] text-zinc-500">
+                      <span class="bg-zinc-800 px-2 py-0.5 rounded font-semibold text-zinc-400 uppercase tracking-wider">${p.category}</span>
+                      <span class="text-amber-400 font-bold group-hover:underline flex items-center gap-0.5">Tocar para añadir +</span>
+                    </div>
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+
+            <!-- PANEL DE COMANDA -->
+            <div class="lg:col-span-4 glass-card p-4 flex flex-col justify-between border-amber-500/30 min-h-[500px]">
+              <div>
+                <div class="flex justify-between items-center border-b border-slate-800 pb-2 mb-3">
+                  <div>
+                    <h3 class="font-black text-base text-white">Comanda: ${state.selectedTable}</h3>
+                    <span class="text-[10px] text-slate-400">${state.cart.length} platillos agregados</span>
+                  </div>
+                  ${state.cart.length > 0 ? `
+                    <button onclick="clearCart()" class="text-xs text-rose-400 hover:text-rose-300 font-bold flex items-center gap-1">
+                      <span>🗑️</span> Vaciar
+                    </button>
+                  ` : ''}
+                </div>
+
+                <div class="space-y-2 max-h-[45vh] overflow-y-auto pr-1">
+                  ${state.cart.length === 0 ? `
+                    <div class="text-center py-12 text-slate-500 space-y-2">
+                      <span class="text-4xl block">🌮</span>
+                      <p class="text-xs font-bold text-slate-400">Comanda vacía</p>
+                      <p class="text-[11px] text-slate-500">Toca cualquier platillo o combo para agregarlo a ${state.selectedTable}.</p>
+                    </div>
+                  ` : ''}
+
+                  ${state.cart.map(c => `
+                    <div class="bg-slate-900/90 border border-slate-800 p-2 rounded-xl text-xs space-y-1.5">
+                      <div class="flex justify-between items-start">
+                        <span class="font-bold text-slate-100">${c.name}</span>
+                        <span class="font-mono font-extrabold text-amber-400">$${(c.price * c.qty).toFixed(2)}</span>
+                      </div>
+
+                      <div class="flex justify-between items-center pt-1 border-t border-slate-800/60">
+                        <button onclick="editItemNote(${c.id})" class="text-[10px] text-sky-400 hover:text-sky-300 font-bold flex items-center gap-1 bg-sky-950/40 px-2 py-0.5 rounded border border-sky-500/30">
+                          <span>✏️</span> ${c.note ? `Nota: ${c.note}` : 'Agregar nota'}
+                        </button>
+
+                        <div class="flex items-center gap-1">
+                          <button onclick="changeQty(${c.id}, -1)" class="w-6 h-6 bg-slate-800 hover:bg-slate-700 rounded-lg flex items-center justify-center font-bold text-slate-300 text-xs">-</button>
+                          <span class="w-6 text-center font-bold text-white">${c.qty}</span>
+                          <button onclick="changeQty(${c.id}, 1)" class="w-6 h-6 bg-amber-500 hover:bg-amber-400 rounded-lg flex items-center justify-center font-bold text-black text-xs">+</button>
+                        </div>
+                      </div>
+                    </div>
+                  `).join('')}
+                </div>
+              </div>
+
+              <div class="mt-4 pt-3 border-t border-slate-800 space-y-2.5">
+                <div class="flex justify-between items-center">
+                  <span class="text-xs font-bold text-slate-400">Total Comanda:</span>
+                  <span class="text-2xl font-black font-mono text-white">$${cartTotal.toFixed(2)}</span>
+                </div>
+
+                <button onclick="sendToKitchen()" ${state.cart.length === 0 ? 'disabled' : ''} class="w-full py-3 bg-gradient-to-r from-orange-600 via-amber-500 to-amber-400 hover:opacity-95 text-black font-black text-xs rounded-xl shadow-lg shadow-orange-600/30 transition flex items-center justify-center gap-2 ${state.cart.length === 0 ? 'opacity-40 cursor-not-allowed' : ''}">
+                  <span>🚀</span> ENVIAR COMANDA A COCINA
+                </button>
+
+                ${ordenPendienteMesa ? `
+                  <button onclick="abrirModalCobroParaMesa('${state.selectedTable}')" class="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs rounded-xl shadow-md transition flex items-center justify-center gap-1.5">
+                    <span>💵</span> Cobrar Cuenta de ${state.selectedTable} ($${ordenPendienteMesa.total.toFixed(2)})
+                  </button>
+                ` : ''}
+              </div>
+            </div>
+
+          </div>
+        `;
+      } 
+      
+      // 2. COCINA (KDS)
+      else if (state.activeTab === 'cocina') {
+        const activeOrds = state.orders.filter(o => o.status !== 'delivered');
+        const now = Date.now();
+
+        container.innerHTML = `
+          <div class="space-y-4">
+            <div class="flex justify-between items-center">
+              <div>
+                <h2 class="text-lg font-black text-white flex items-center gap-2">
+                  <span>👨‍🍳</span> PANTALLA DE COCINA (KDS)
+                </h2>
+                <p class="text-xs text-slate-400 font-medium">${activeOrds.length} comandas en preparación o listas</p>
+              </div>
+              <span class="text-xs font-mono bg-slate-900 border border-slate-800 px-3 py-1 rounded-xl text-slate-400">
+                🔔 Alarma visual (>15 min)
+              </span>
+            </div>
+
+            ${activeOrds.length === 0 ? `
+              <div class="glass-card p-12 text-center text-slate-500 space-y-2">
+                <span class="text-5xl block">🎉</span>
+                <p class="text-base font-bold text-slate-300">¡Cocina al día!</p>
+                <p class="text-xs">No hay comandas pendientes en este momento.</p>
+              </div>
+            ` : `
+              <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                ${activeOrds.map(o => {
+                  const elapsedMinutes = Math.floor((now - new Date(o.createdAt).getTime()) / 60000);
+                  const isLate = elapsedMinutes >= 15;
+
+                  return `
+                    <div class="glass-card p-4 rounded-2xl flex flex-col justify-between border-2 transition ${isLate ? 'pulse-alert border-red-500' : (o.status === 'ready' ? 'border-emerald-500' : 'border-amber-500/40')}">
+                      <div>
+                        <div class="flex justify-between items-center border-b border-slate-800 pb-2 mb-2">
+                          <div>
+                            <span class="font-black text-amber-400 text-base block">${o.tableName}</span>
+                            <span class="text-[10px] text-slate-400 font-mono">${o.id}</span>
+                          </div>
+                          <div class="text-right">
+                            <span class="text-xs font-extrabold ${isLate ? 'text-red-400 font-mono' : 'text-slate-300 font-mono'}">
+                              ⏱️ ${elapsedMinutes} min
+                            </span>
+                            <span class="block text-[9px] uppercase font-bold ${o.status === 'ready' ? 'text-emerald-400' : 'text-amber-400'}">
+                              ${o.status === 'pending' ? 'Por iniciar' : (o.status === 'preparing' ? 'En cocción' : 'Listo')}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div class="space-y-1.5 text-xs py-1">
+                          ${o.items.map(i => `
+                            <div class="bg-slate-900/90 border border-slate-800/80 p-2 rounded-xl">
+                              <div class="flex justify-between font-extrabold text-slate-200">
+                                <span>${i.qty}x ${i.name}</span>
+                              </div>
+                              ${i.note ? `
+                                <div class="mt-1 text-[11px] font-bold text-amber-300 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
+                                  ⚠️ Nota: ${i.note}
+                                </div>
+                              ` : ''}
+                            </div>
+                          `).join('')}
+                        </div>
+                      </div>
+
+                      <div class="mt-4 pt-2 border-t border-slate-800">
+                        ${o.status === 'pending' ? `
+                          <button onclick="updateOrderStatus('${o.id}', 'preparing')" class="w-full py-2.5 bg-sky-600 hover:bg-sky-500 text-white font-black text-xs rounded-xl shadow-md transition">
+                            🔥 EMPEZAR PREPARACIÓN
+                          </button>
+                        ` : ''}
+                        ${o.status === 'preparing' ? `
+                          <button onclick="updateOrderStatus('${o.id}', 'ready')" class="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs rounded-xl shadow-md transition">
+                            🟢 MARCAR COMO LISTO
+                          </button>
+                        ` : ''}
+                        ${o.status === 'ready' ? `
+                          <button onclick="updateOrderStatus('${o.id}', 'delivered')" class="w-full py-2.5 bg-purple-600 hover:bg-purple-500 text-white font-black text-xs rounded-xl shadow-md transition">
+                            🍽️ ENTREGADO EN MESA
+                          </button>
+                        ` : ''}
+                      </div>
+                    </div>
+                  `;
+                }).join('')}
+              </div>
+            `}
+          </div>
+        `;
+      } 
+
+      // 3. CAJA & CIERRE
+      else if (state.activeTab === 'caja') {
+        const paidOrders = state.orders.filter(o => o.paymentStatus === 'paid');
+        const ventasEfectivo = paidOrders.filter(o => o.paymentMethod === 'Efectivo').reduce((a, b) => a + b.total, 0);
+        const ventasDigitales = paidOrders.filter(o => o.paymentMethod !== 'Efectivo').reduce((a, b) => a + b.total, 0);
+        const ventasTotalesBrutas = ventasEfectivo + ventasDigitales;
+        const totalGastos = state.expenses.reduce((a, b) => a + b.monto, 0);
+        const ventasNetas = ventasTotalesBrutas - totalGastos;
+        const efectivoEnCaja = state.initialCash + ventasEfectivo - totalGastos;
+        const totalComandas = state.orders.length;
+
+        container.innerHTML = `
+          <div class="space-y-4">
+            <div class="flex flex-wrap items-center justify-between gap-2 bg-slate-900 p-2.5 rounded-2xl border border-slate-800">
+              <div class="flex items-center gap-2">
+                <span class="text-xs text-slate-400 font-bold">Base de Caja:</span>
+                <span class="font-mono text-sky-400 font-extrabold text-sm">$${state.initialCash.toFixed(2)}</span>
+                <button onclick="abrirModalFondoInicial()" class="bg-slate-800 hover:bg-slate-700 text-amber-300 font-bold px-2 py-0.5 rounded-lg text-xs border border-amber-500/30">
+                  ✏️ Cambiar Fondo
+                </button>
+              </div>
+
+              <div class="flex items-center gap-2">
+                <button onclick="abrirModalTopClientes()" class="bg-gradient-to-r from-amber-500 to-yellow-400 hover:from-amber-400 hover:to-yellow-300 text-black font-black px-3 py-1.5 rounded-xl text-xs flex items-center gap-1 shadow-md shadow-amber-500/20 transition">
+                  <span>👑</span> Top Clientes Frecuentes
+                </button>
+                <button onclick="abrirModalReporteProductos()" class="bg-slate-800 hover:bg-slate-700 text-amber-300 font-bold px-3 py-1.5 rounded-xl text-xs flex items-center gap-1 border border-slate-700 transition">
+                  <span>📊</span> Ranking Platillos
+                </button>
+                <button onclick="abrirModalConfigUrl()" class="bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold px-2.5 py-1.5 rounded-xl text-xs flex items-center gap-1 border border-slate-700 transition">
+                  <span>⚙️</span> URL Sheets
+                </button>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
+              <div class="glass-card p-3 border-slate-800">
+                <span class="text-[10px] text-slate-400 uppercase font-bold block">💵 Fondo Inicial</span>
+                <p class="text-lg font-black font-mono text-sky-400 mt-0.5">$${state.initialCash.toFixed(2)}</p>
+              </div>
+              <div class="glass-card p-3 border-slate-800">
+                <span class="text-[10px] text-slate-400 uppercase font-bold block">📥 Ventas Efectivo</span>
+                <p class="text-lg font-black font-mono text-emerald-400 mt-0.5">+$${ventasEfectivo.toFixed(2)}</p>
+              </div>
+              <div class="glass-card p-3 border-slate-800">
+                <span class="text-[10px] text-slate-400 uppercase font-bold block">💳 Tarjeta/Transf.</span>
+                <p class="text-lg font-black font-mono text-indigo-400 mt-0.5">+$${ventasDigitales.toFixed(2)}</p>
+              </div>
+              <div class="glass-card p-3 border-slate-800">
+                <span class="text-[10px] text-slate-400 uppercase font-bold block">💸 Gastos de Caja</span>
+                <p class="text-lg font-black font-mono text-rose-400 mt-0.5">-$${totalGastos.toFixed(2)}</p>
+              </div>
+              <div class="glass-card p-3 border-amber-500/30 bg-amber-950/20">
+                <span class="text-[10px] text-amber-300 uppercase font-bold block">📈 Venta Neta Día</span>
+                <p class="text-lg font-black font-mono text-amber-400 mt-0.5">$${ventasNetas.toFixed(2)}</p>
+              </div>
+              <div class="glass-card p-3 border-emerald-500/40 bg-emerald-950/20">
+                <span class="text-[10px] text-emerald-300 uppercase font-bold block">💰 Efectivo en Cajón</span>
+                <p class="text-lg font-black font-mono text-white mt-0.5">$${efectivoEnCaja.toFixed(2)}</p>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-4">
+              <div class="lg:col-span-5 glass-card p-4 space-y-3">
+                <h3 class="font-extrabold text-sm text-white flex items-center gap-1.5">
+                  <span>💸</span> Registrar Salida / Gasto de Caja
+                </h3>
+                <form onsubmit="agregarGastoCaja(event)" class="space-y-3">
+                  <div>
+                    <label class="block text-xs font-bold text-slate-400 mb-1">Concepto del Gasto</label>
+                    <input type="text" id="gasto-concepto" required placeholder="Ej. Hielo, limones, gas..." class="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-rose-500">
+                  </div>
+                  <div>
+                    <label class="block text-xs font-bold text-slate-400 mb-1">Monto ($)</label>
+                    <input type="number" step="0.5" id="gasto-monto" required placeholder="0.00" class="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs font-bold font-mono text-white placeholder-slate-500 focus:outline-none focus:border-rose-500">
+                  </div>
+                  <button type="submit" class="w-full py-2 bg-rose-600 hover:bg-rose-500 text-white font-extrabold text-xs rounded-xl transition shadow-md">
+                    Guardar Gasto en Google Sheets
+                  </button>
+                </form>
+
+                <div class="pt-2 border-t border-slate-800 space-y-1.5 max-h-40 overflow-y-auto">
+                  <span class="text-[11px] text-slate-400 font-bold block">Gastos del Turno:</span>
+                  ${state.expenses.length === 0 ? '<p class="text-xs text-slate-500">Sin gastos reportados.</p>' : ''}
+                  ${state.expenses.map(g => `
+                    <div class="flex justify-between items-center bg-slate-900 p-2 rounded-lg text-xs">
+                      <span class="text-slate-300 font-medium">${g.concepto}</span>
+                      <span class="text-rose-400 font-mono font-bold">-$${g.monto.toFixed(2)}</span>
+                    </div>
+                  `).join('')}
+                </div>
+              </div>
+
+              <div class="lg:col-span-7 glass-card p-4 space-y-3">
+                <div class="flex justify-between items-center">
+                  <h3 class="font-extrabold text-sm text-white flex items-center gap-1.5">
+                    <span>🧾</span> Historial de Comandas del Turno (${totalComandas})
+                  </h3>
+                  <button onclick="reiniciarTurno()" class="text-xs text-rose-400 hover:underline font-bold">
+                    🔒 Cierre Z (Archivar en Sheets)
+                  </button>
+                </div>
+
+                <div class="space-y-2 max-h-[50vh] overflow-y-auto pr-1">
+                  ${state.orders.length === 0 ? '<p class="text-xs text-slate-500 text-center py-8">No hay comandas registradas.</p>' : ''}
+                  ${state.orders.map(o => `
+                    <div class="bg-slate-900 border border-slate-800 p-3 rounded-xl flex flex-wrap justify-between items-center gap-2 text-xs">
+                      <div>
+                        <div class="flex items-center gap-2">
+                          <span class="font-extrabold text-amber-400">${o.tableName}</span>
+                          <span class="text-slate-500 font-mono text-[10px]">${o.id}</span>
+                          <span class="text-[10px] font-bold px-2 py-0.5 rounded-full ${o.paymentStatus === 'paid' ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'bg-rose-500/20 text-rose-300 border border-rose-500/30'}">
+                            ${o.paymentStatus === 'paid' ? `Pagado (${o.paymentMethod})` : 'Por Cobrar'}
+                          </span>
+                        </div>
+                        <p class="text-slate-400 text-[11px] mt-0.5">${o.items.map(i => `${i.qty}x ${i.name}`).join(', ')}</p>
+                        ${o.customer && o.customer.name !== 'Consumidor Final' ? `
+                          <p class="text-[10px] text-amber-300 font-bold mt-0.5">👤 ${o.customer.name} (CC: ${o.customer.doc})</p>
+                        ` : ''}
+                      </div>
+
+                      <div class="flex items-center gap-3">
+                        <span class="font-black font-mono text-sm text-white">$${o.total.toFixed(2)}</span>
+                        ${o.paymentStatus !== 'paid' ? `
+                          <button onclick="abrirModalCobroParaMesa('${o.tableName}')" class="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-2.5 py-1 rounded-lg text-xs transition">
+                            Cobrar
+                          </button>
+                        ` : `
+                          <button onclick='mostrarTicketTermico(${JSON.stringify(o)})' class="bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold px-2.5 py-1 rounded-lg text-xs transition flex items-center gap-1">
+                            <span>🖨️</span> Ticket
+                          </button>
+                        `}
+                      </div>
+                    </div>
+                  `).join('')}
+                </div>
+              </div>
+
+            </div>
+          </div>
+        `;
+      }
+
+      // 4. PERSONAL & NÓMINA: SELECTOR Y CÁLCULO DE PERIODOS (DÍA, SEMANA, QUINCENA, MES)
+      else if (state.activeTab === 'personal') {
+        const d = new Date();
+        const per = state.periodoNomina;
+
+        let nombrePeriodoTexto = "Día de Hoy";
+        if (per === 'semana') nombrePeriodoTexto = "Semana en Curso";
+        else if (per === 'quincena') nombrePeriodoTexto = d.getDate() <= 15 ? `1ª Quincena de ${d.toLocaleString('es', { month: 'long' })}` : `2ª Quincena de ${d.toLocaleString('es', { month: 'long' })}`;
+        else if (per === 'mes') nombrePeriodoTexto = `Mes de ${d.toLocaleString('es', { month: 'long' })}`;
+
+        let totalHorasPeriodo = 0;
+        let totalNominaPeriodo = 0;
+
+        state.employees.forEach(emp => {
+          const h = calcularPeriodosCompletosEmpleado(emp.id);
+          const hrs = h[per];
+          totalHorasPeriodo += hrs;
+          totalNominaPeriodo += (hrs * emp.hourlyRate);
+        });
+
+        container.innerHTML = `
+          <div class="space-y-4">
+            
+            <!-- SELECTOR DINÁMICO DE PERIODO ACTIVO (DÍA, SEMANA, QUINCENA, MES) -->
+            <div class="glass-card p-3 flex flex-wrap items-center justify-between gap-3 border-amber-500/30 bg-slate-950/80">
+              <div class="flex items-center gap-2">
+                <span class="text-xs text-amber-400 font-black uppercase flex items-center gap-1">
+                  <span>📅</span> Periodo de Pago Activo:
+                </span>
+                <div class="inline-flex bg-slate-900 p-1 rounded-xl border border-slate-800">
+                  <button onclick="cambiarPeriodoNomina('dia')" class="px-2.5 py-1 rounded-lg text-xs font-bold transition ${per === 'dia' ? 'bg-amber-500 text-black shadow-md' : 'text-slate-400 hover:text-white'}">
+                    Día
+                  </button>
+                  <button onclick="cambiarPeriodoNomina('semana')" class="px-2.5 py-1 rounded-lg text-xs font-bold transition ${per === 'semana' ? 'bg-amber-500 text-black shadow-md' : 'text-slate-400 hover:text-white'}">
+                    Semana
+                  </button>
+                  <button onclick="cambiarPeriodoNomina('quincena')" class="px-2.5 py-1 rounded-lg text-xs font-bold transition ${per === 'quincena' ? 'bg-amber-500 text-black shadow-md' : 'text-slate-400 hover:text-white'}">
+                    Quincena
+                  </button>
+                  <button onclick="cambiarPeriodoNomina('mes')" class="px-2.5 py-1 rounded-lg text-xs font-bold transition ${per === 'mes' ? 'bg-amber-500 text-black shadow-md' : 'text-slate-400 hover:text-white'}">
+                    Mes
+                  </button>
+                </div>
+              </div>
+
+              <div class="text-xs text-slate-300 font-semibold bg-slate-900 px-3 py-1 rounded-xl border border-slate-800">
+                Periodo: <b class="text-white">${nombrePeriodoTexto}</b>
+              </div>
+            </div>
+
+            <!-- TARJETAS DE NÓMINA SEGÚN EL PERIODO SELECCIONADO -->
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div class="glass-card p-3 border-slate-800">
+                <span class="text-[10px] text-slate-400 uppercase font-bold block">👥 Empleados</span>
+                <p class="text-xl font-black font-mono text-white mt-0.5">${state.employees.length}</p>
+              </div>
+              <div class="glass-card p-3 border-slate-800">
+                <span class="text-[10px] text-slate-400 uppercase font-bold block">⌛ Horas Periodo</span>
+                <p class="text-xl font-black font-mono text-sky-400 mt-0.5">${totalHorasPeriodo.toFixed(1)} hrs</p>
+              </div>
+              <div class="glass-card p-3 border-amber-500/40 bg-amber-950/20">
+                <span class="text-[10px] text-amber-300 uppercase font-bold block">💵 Total a Liquidar (${per.toUpperCase()})</span>
+                <p class="text-xl font-black font-mono text-amber-400 mt-0.5">$${totalNominaPeriodo.toFixed(2)}</p>
+              </div>
+              <div class="glass-card p-3 border-emerald-500/40 bg-emerald-950/20 flex flex-col justify-between">
+                <span class="text-[10px] text-emerald-300 uppercase font-bold block">⚙️ Personal</span>
+                <button onclick="abrirModalNuevoEmpleado()" class="mt-1 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs py-1 px-2 rounded-lg transition shadow-sm">
+                  + Registrar Empleado
+                </button>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-4">
+              
+              <!-- RELOJ CHECADOR CON CÁMARA FRONTAL Y TECLADO PIN -->
+              <div class="lg:col-span-5 glass-card p-4 space-y-3 border-amber-500/30">
+                <div class="flex justify-between items-center border-b border-slate-800 pb-2">
+                  <h3 class="font-black text-sm text-white flex items-center gap-1.5">
+                    <span>⏰</span> Reloj Checador Biométrico
+                  </h3>
+                  <span id="cam-status-badge" onclick="conectarCamaraVideo()" class="text-[10px] bg-slate-800 text-slate-300 border border-slate-700 px-2.5 py-0.5 rounded-full font-bold cursor-pointer hover:bg-slate-700 transition">
+                    📸 Activar Cámara
+                  </span>
+                </div>
+
+                <div class="relative rounded-2xl overflow-hidden bg-slate-950 border border-slate-800 aspect-video flex items-center justify-center">
+                  <video id="camara-checador" autoplay playsinline muted class="w-full h-full object-cover"></video>
+                  <canvas id="snapshot-canvas" class="hidden"></canvas>
+                  
+                  <div id="cam-aviso-seguridad" class="absolute inset-0 bg-slate-950/92 flex flex-col items-center justify-center p-4 text-center space-y-2 hidden">
+                    <span class="text-3xl block">📷</span>
+                    <p class="text-xs font-bold text-white">Activar Permiso de Cámara</p>
+                    <p class="text-[11px] text-slate-300 max-w-xs">
+                      Los navegadores externos requieren que des clic en <b>"Permitir"</b> y que la página use <b>HTTPS</b> o <b>localhost</b>.
+                    </p>
+                    <button type="button" onclick="conectarCamaraVideo()" class="px-3.5 py-1.5 bg-amber-500 hover:bg-amber-400 text-black font-extrabold text-xs rounded-xl shadow-md transition">
+                      📸 Permitir Cámara Ahora
+                    </button>
+                    <p class="text-[10px] text-slate-500">Nota: La marcación con PIN de 4 dígitos funciona siempre.</p>
+                  </div>
+
+                  <div class="absolute bottom-1 right-2 text-[9px] bg-black/60 text-slate-300 px-1.5 py-0.5 rounded">
+                    Cámara Frontal
+                  </div>
+                </div>
+
+                <div>
+                  <input type="text" id="display-pin-marcador" readonly placeholder="Ingresa PIN de 4 dígitos" class="w-full text-center tracking-[0.5em] text-2xl font-mono font-black bg-slate-950 border border-slate-800 rounded-2xl py-2 text-amber-400 focus:outline-none">
+                </div>
+
+                <div id="info-empleado-marcador"></div>
+
+                <div class="grid grid-cols-3 gap-2">
+                  ${[1, 2, 3, 4, 5, 6, 7, 8, 9].map(num => `
+                    <button onclick="presionarDigitoPin('${num}')" class="py-2.5 rounded-xl bg-slate-900 border border-slate-800 hover:bg-slate-800 font-black text-base text-white transition active:scale-95 shadow-sm">
+                      ${num}
+                    </button>
+                  `).join('')}
+                  <button onclick="limpiarPinMarcador()" class="py-2.5 rounded-xl bg-slate-900/60 border border-slate-800 hover:bg-rose-950/40 text-rose-400 font-bold text-xs transition">
+                    Limpiar
+                  </button>
+                  <button onclick="presionarDigitoPin('0')" class="py-2.5 rounded-xl bg-slate-900 border border-slate-800 hover:bg-slate-800 font-black text-base text-white transition active:scale-95">
+                    0
+                  </button>
+                  <button onclick="borrarDigitoPin()" class="py-2.5 rounded-xl bg-slate-900/60 border border-slate-800 hover:bg-slate-800 font-bold text-sm text-slate-300 transition">
+                    ⌫
+                  </button>
+                </div>
+
+                <div class="grid grid-cols-2 gap-2 pt-1">
+                  <button id="btn-marcar-entrada" onclick="ejecutarMarcacion('entrada')" class="py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 font-black text-xs text-white shadow-lg shadow-emerald-600/30 transition flex items-center justify-center gap-1">
+                    <span>🟢</span> REGISTRAR ENTRADA
+                  </button>
+                  <button id="btn-marcar-salida" onclick="ejecutarMarcacion('salida')" class="py-3 rounded-xl bg-rose-600 hover:bg-rose-500 font-black text-xs text-white shadow-lg shadow-rose-600/30 transition flex items-center justify-center gap-1">
+                    <span>🔴</span> REGISTRAR SALIDA
+                  </button>
+                </div>
+              </div>
+
+              <!-- PLANILLA CON DESGLOSE COMPLETO: DÍA, SEMANA, QUINCENA, MES -->
+              <div class="lg:col-span-7 glass-card p-4 space-y-3">
+                <div class="flex justify-between items-center border-b border-slate-800 pb-2">
+                  <div>
+                    <h3 class="font-black text-sm text-white flex items-center gap-1.5">
+                      <span>📋</span> Planilla de Horas y Liquidación
+                    </h3>
+                    <p class="text-[10px] text-slate-400">Desglose exacto de pago por empleado</p>
+                  </div>
+                  <span class="text-xs font-mono bg-amber-500/10 text-amber-300 border border-amber-500/30 px-2 py-0.5 rounded-lg font-bold">
+                    Periodo: ${per.toUpperCase()}
+                  </span>
+                </div>
+
+                <div class="space-y-2.5 max-h-[60vh] overflow-y-auto pr-1">
+                  ${state.employees.map(emp => {
+                    const h = calcularPeriodosCompletosEmpleado(emp.id);
+                    const horasDelPeriodo = h[per];
+                    const pagoPeriodo = (horasDelPeriodo * emp.hourlyRate).toFixed(2);
+                    const turnoActivo = state.attendance.find(a => a.empId === emp.id && a.status === 'open');
+
+                    return `
+                      <div class="bg-slate-900/90 border border-slate-800 p-3 rounded-2xl space-y-2.5">
+                        <div class="flex justify-between items-start">
+                          <div>
+                            <div class="flex items-center gap-2">
+                              <span class="font-extrabold text-sm text-white">${emp.name}</span>
+                              <span class="text-[10px] bg-slate-800 px-2 py-0.5 rounded-full text-slate-300 font-semibold">${emp.role}</span>
+                              <span class="text-[10px] font-bold ${turnoActivo ? 'text-emerald-400' : 'text-slate-500'}">
+                                ${turnoActivo ? '● En Turno' : '○ Fuera'}
+                              </span>
+                            </div>
+                            <div class="flex items-center gap-2 mt-1">
+                              <span class="text-xs text-emerald-400 font-black">
+                                Tarifa: $${emp.hourlyRate.toFixed(2)}/hora
+                              </span>
+                              <button onclick='abrirModalEditarEmpleado(${JSON.stringify(emp)})' class="text-[10px] text-amber-400 hover:underline font-bold">
+                                ✏️ Modificar Tarifa / PIN
+                              </button>
+                            </div>
+                          </div>
+
+                          <button onclick='enviarReciboNominaWhatsApp(${JSON.stringify(emp)})' class="bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold px-3 py-1.5 rounded-xl text-xs flex items-center gap-1 shadow-md transition" title="Enviar desprendible por WhatsApp">
+                            <span>📲</span> Recibo ${per.toUpperCase()}
+                          </button>
+                        </div>
+
+                        <!-- CUADRÍCULA DE CÁLCULO POR PERIODO -->
+                        <div class="grid grid-cols-4 gap-1.5 text-center text-xs bg-slate-950 p-2 rounded-xl border border-slate-800">
+                          <div class="p-1 rounded-lg ${per === 'dia' ? 'bg-amber-500/20 border border-amber-500/40' : ''}">
+                            <span class="text-[9px] text-slate-400 block uppercase font-bold">Hoy</span>
+                            <span class="font-black text-slate-200 font-mono">${h.dia}h</span>
+                            <span class="text-[10px] font-bold text-amber-300 block font-mono">$${(h.dia * emp.hourlyRate).toFixed(2)}</span>
+                          </div>
+
+                          <div class="p-1 rounded-lg ${per === 'semana' ? 'bg-amber-500/20 border border-amber-500/40' : ''}">
+                            <span class="text-[9px] text-slate-400 block uppercase font-bold">Semana</span>
+                            <span class="font-black text-sky-400 font-mono">${h.semana}h</span>
+                            <span class="text-[10px] font-bold text-sky-300 block font-mono">$${(h.semana * emp.hourlyRate).toFixed(2)}</span>
+                          </div>
+
+                          <div class="p-1 rounded-lg ${per === 'quincena' ? 'bg-amber-500/20 border border-amber-500/40' : ''}">
+                            <span class="text-[9px] text-slate-400 block uppercase font-bold">Quincena</span>
+                            <span class="font-black text-amber-400 font-mono">${h.quincena}h</span>
+                            <span class="text-[10px] font-bold text-amber-300 block font-mono">$${(h.quincena * emp.hourlyRate).toFixed(2)}</span>
+                          </div>
+
+                          <div class="p-1 rounded-lg ${per === 'mes' ? 'bg-amber-500/20 border border-amber-500/40' : ''}">
+                            <span class="text-[9px] text-slate-400 block uppercase font-bold">Mes</span>
+                            <span class="font-black text-emerald-400 font-mono">${h.mes}h</span>
+                            <span class="text-[10px] font-bold text-emerald-300 block font-mono">$${(h.mes * emp.hourlyRate).toFixed(2)}</span>
+                          </div>
+                        </div>
+
+                        <!-- TOTAL DEL PERIODO SELECCIONADO -->
+                        <div class="flex justify-between items-center pt-1 px-1 text-xs">
+                          <span class="text-slate-400 font-semibold">Total a Liquidar (${nombrePeriodoTexto}):</span>
+                          <span class="text-base font-black text-emerald-400 font-mono">$${pagoPeriodo}</span>
+                        </div>
+                      </div>
+                    `;
+                  }).join('')}
+                </div>
+              </div>
+
+            </div>
+          </div>
+        `;
+
+        setTimeout(conectarCamaraVideo, 50);
+      }
+    }
+
+    setInterval(() => {
+      if (state.activeTab === 'cocina') render();
+    }, 30000);
+
+    render();
+  </script>
+</body>
+</html>

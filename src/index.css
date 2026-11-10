@@ -1,0 +1,42 @@
+@import "tailwindcss";
+
+@layer base {
+  body {
+    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+    background-color: #090a0f;
+    color: #f8fafc;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  h1, h2, h3, h4, .font-heading {
+    font-family: 'Outfit', system-ui, -apple-system, sans-serif;
+  }
+}
+
+.glass-card {
+  background: rgba(18, 20, 29, 0.92);
+  backdrop-filter: blur(12px);
+  border: 1px solid #24293a;
+  border-radius: 1rem;
+}
+
+.thermal-receipt {
+  background: #fff;
+  color: #000;
+  font-family: 'Courier New', Courier, monospace;
+  padding: 1.25rem;
+  border-radius: 4px;
+  max-width: 330px;
+  margin: 0 auto;
+  box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+}
+
+@keyframes pulseAlert {
+  0%, 100% { border-color: #ef4444; box-shadow: 0 0 15px rgba(239, 68, 68, 0.4); }
+  50% { border-color: #f97316; box-shadow: 0 0 25px rgba(249, 115, 22, 0.85); }
+}
+
+.pulse-alert {
+  animation: pulseAlert 1.5s infinite;
+}

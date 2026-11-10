@@ -1,0 +1,6 @@
+{
+  "name": "TA CABRÓN - POS & Fidelización",
+  "description": "Sistema POS gastronómico, cocina KDS, control de nómina y módulo administrativo con fidelización y ranking de clientes frecuentes sumando compras y visitas.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
